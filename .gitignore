@@ -3,3 +3,11 @@ node_modules
 .DS_Store
 dist
 coverage
+
+# local sqlite db
+apps/api/dev.db
+
+# local sqlite db
+apps/api/prisma/dev.db
+!apps/api/.env.example
+

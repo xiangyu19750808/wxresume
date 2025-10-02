@@ -6,3 +6,6 @@ packages:
   - scripts
   - data
   - samples
+
+onlyBuiltDependencies:
+  - '@prisma/client'

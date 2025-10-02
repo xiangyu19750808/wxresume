@@ -1,0 +1,34 @@
+@host=http://localhost:8080
+@user_id=cmg99oq140000t88wx9u8gcix  // 如有不同，改成你的 user_id
+
+### 健康检查
+GET {{host}}/v1/health
+
+### OAuth 模拟登录（返回 JWT）
+GET {{host}}/v1/auth/wx/callback?code=abc123
+
+### 渲染简历（HTML → PDF）
+POST {{host}}/v1/render/resume
+Content-Type: application/json
+
+{
+  "templateId": "classic"
+}
+
+### 将一次结果保存到数据库（示例数据）
+POST {{host}}/v1/results/db/save
+Content-Type: application/json
+
+{
+  "user_id": "{{user_id}}",
+  "match": { "match_score": 30 },
+  "report": { "radar": { "hard": 30 } },
+  "file_id": "x.pdf",
+  "bytes": 12345
+}
+
+### 按 user_id 查询结果列表（倒序）
+GET {{host}}/v1/results/db?user_id={{user_id}}
+
+### 按 rid 查询单条结果（把 R-ID 替换为真实 rid）
+GET {{host}}/v1/results/R-ID
