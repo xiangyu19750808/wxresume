@@ -255,3 +255,69 @@ app.post("/v1/order/callback", (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || "error" });
   }
 });
+// ===== Results (memory) =====
+const MEM_RESULTS = new Map();
+function newResult({ user_id="demo", match={}, report={}, file={} }) {
+  const rid = "R" + Date.now();
+  const item = { rid, user_id, match, report, file, created_at: Date.now() };
+  MEM_RESULTS.set(rid, item);
+  return item;
+}
+
+app.post("/v1/results/demo", async (req, res) => {
+  try {
+    const repoRoot = path.resolve(process.cwd(), "../../");
+    const dict = JSON.parse(fs.readFileSync(path.join(repoRoot, "data/jd_dict_zh.json"), "utf-8"));
+    const resume = JSON.parse(fs.readFileSync(path.join(repoRoot, "samples/resume/alice.json"), "utf-8"));
+    const text = String(req.body?.jd_text || "3年以上，SQL/Excel，Tableau，沟通协作");
+
+    const hit = (list=[]) => list.filter(w => text.includes(w));
+    const keywords = Array.from(new Set([...hit(dict.skills||[]), ...hit(dict.soft||[])]));
+
+    const rs = new Set((resume.skills||[]).map(s => s.name));
+    const jd = new Set(keywords);
+    const inter = [...jd].filter(k => rs.has(k));
+    const union = new Set([...jd, ...rs]);
+
+    let score = Math.round((union.size ? inter.length / union.size : 0) * 100);
+    const mustMiss = [...(dict.skills||[]).filter(k => jd.has(k))].filter(k => !rs.has(k)).length;
+    score = Math.max(0, score - mustMiss * 10);
+
+    const match = { match_score: score, hits: inter, gaps: [...jd].filter(k => !rs.has(k)).slice(0,3) };
+
+    const hard = Math.min(100, Math.max(0, score));
+    const experience = Math.min(100, Math.max(0, Math.round(score * 0.8)));
+    const soft = Math.min(100, Math.max(0, 60 + match.hits.length * 5 - match.gaps.length * 10));
+    const report = {
+      radar: { hard, experience, soft },
+      recommendations: [
+        match.gaps[0] ? `补齐技能：优先学习【${match.gaps[0]}】并产出作品` : "保持优势，完善项目案例",
+        hard < 70 ? "强化硬技能：围绕JD做2个小项目" : "准备技术亮点总结，量化成果",
+        soft < 70 ? "提升软能力：准备STAR面试故事" : "优化简历表达，突出协作成果"
+      ]
+    };
+
+    const { renderPDF } = await import("../../../packages/templates/index.js");
+    const { getSignedUrl } = await import("../../../packages/adapters/cos/index.js");
+    const buf = await renderPDF({ templateId: "classic", resume });
+    const fid = "result-" + Date.now() + ".pdf";
+    const file = { file_id: fid, bytes: buf.length, url: await getSignedUrl(fid) };
+
+    const item = newResult({ match, report, file });
+    res.json({ code: 0, data: item });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "error" });
+  }
+});
+
+app.get("/v1/results", (req, res) => {
+  res.json({ code: 0, data: [...MEM_RESULTS.values()].sort((a,b)=>b.created_at-a.created_at) });
+});
+
+app.get("/v1/results/:rid", (req, res) => {
+  const rid = String(req.params.rid || "");
+  const item = MEM_RESULTS.get(rid);
+  if (!item) return res.status(404).json({ code: 404, msg: "not found" });
+  res.json({ code: 0, data: item });
+});
+
