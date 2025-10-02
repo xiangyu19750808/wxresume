@@ -197,3 +197,24 @@ app.get("/v1/users/me", verifyJWT, (req, res) => {
   const user = MEM_USERS.get(uid) || { id: uid, nickname: req.user?.nick || "" };
   res.json({ code: 0, data: { user } });
 });
+
+// ===== Order mock: /v1/order/create =====
+const MEM_ORDERS = new Map(); // key: out_trade_no, val: {status, amount, plan}
+
+function genOutTradeNo() {
+  const t = Date.now().toString();
+  return "ORD" + t.slice(-8) + Math.floor(Math.random()*1000).toString().padStart(3,"0");
+}
+
+// 创建订单（占位，返回假 prepay_id）
+app.post("/v1/order/create", (req, res) => {
+  try {
+    const { plan = "basic", amount = 1990 } = req.body || {};
+    const out_trade_no = genOutTradeNo();
+    MEM_ORDERS.set(out_trade_no, { status: "created", amount, plan, created_at: Date.now() });
+    const prepay_id = "mock_prepay_" + out_trade_no;
+    res.json({ code: 0, data: { out_trade_no, prepay_id } });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "error" });
+  }
+});
