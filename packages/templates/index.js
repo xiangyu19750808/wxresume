@@ -1,10 +1,14 @@
 import fs from "fs";
 import path from "path";
-const root = path.resolve(process.cwd(), "packages/templates");
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const root = __dirname; // 当前文件夹即 packages/templates
 
 export function listTemplates() {
-  const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json")));
-  return manifest.templates;
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf-8"));
+  return manifest.templates || [];
 }
 
 export async function validateResume(data) {
