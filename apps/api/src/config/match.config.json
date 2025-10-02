@@ -1,0 +1,1 @@
+{ "weights": { "hard": 0.6, "experience": 0.25, "soft": 0.15 }, "gaps_topk": 3 }

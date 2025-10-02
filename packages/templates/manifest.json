@@ -1,0 +1,7 @@
+{
+  "version":"1.0.0",
+  "templates":[
+    {"id":"classic","name":"经典单栏","preview":"templates/classic/preview.png"},
+    {"id":"modern","name":"现代双栏","preview":"templates/modern/preview.png"}
+  ]
+}

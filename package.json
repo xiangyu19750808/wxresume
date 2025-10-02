@@ -1,0 +1,11 @@
+{
+  "name": "wxresume",
+  "private": true,
+  "scripts": {
+    "dev:api": "pnpm --filter @wxresume/api dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "migrate": "pnpm --filter @wxresume/api migrate",
+    "seed": "pnpm --filter @wxresume/api seed"
+  }
+}

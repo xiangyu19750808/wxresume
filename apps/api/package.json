@@ -1,0 +1,19 @@
+{
+  "name": "@wxresume/api",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "build": "echo build-skip",
+    "migrate": "node prisma/migrate.js || true",
+    "seed": "node prisma/seed.js || true",
+    "test": "node -e \"console.log('tests placeholder')\""
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.0.0",
+    "morgan": "^1.10.0",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.1"
+  }
+}
