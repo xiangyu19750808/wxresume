@@ -138,3 +138,15 @@ app.post("/v1/analysis/report", (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || "error" });
   }
 });
+
+// 文件下载占位：?file_id=xxx -> 返回临时URL
+import { getSignedUrl } from "../../../packages/adapters/cos/index.js";
+app.get("/v1/file/download", async (req, res) => {
+  try {
+    const fileId = String(req.query.file_id || "demo.pdf");
+    const url = await getSignedUrl(fileId);
+    res.json({ code: 0, data: { url } });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "error" });
+  }
+});
