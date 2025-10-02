@@ -364,3 +364,15 @@ app.post("/v1/render/resume", async (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || "render error" });
   }
 });
+
+// Serve OpenAPI JSON
+app.get("/v1/openapi.json", (req, res) => {
+  try {
+    const p = path.resolve(process.cwd(), "src/openapi.json");
+    const json = fs.readFileSync(p, "utf-8");
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.send(json);
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "openapi error" });
+  }
+});
