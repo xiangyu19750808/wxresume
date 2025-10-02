@@ -113,3 +113,28 @@ app.post("/v1/match/score", (req, res) => {
 
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log(`API listening on ${port}`));
+
+// 诊断报告（雷达+三条建议，占位计算）
+app.post("/v1/analysis/report", (req, res) => {
+  try {
+    const a = req.body?.analysis || {};
+    const ms = Number(a.match_score || 0);
+    const hits = Array.isArray(a.hits) ? a.hits : [];
+    const gaps = Array.isArray(a.gaps) ? a.gaps : [];
+
+    const hard = Math.max(0, Math.min(100, ms));
+    const experience = Math.max(0, Math.min(100, Math.round(ms * 0.8)));
+    const soft = Math.max(0, Math.min(100, 60 + hits.length * 5 - gaps.length * 10));
+
+    const radar = { hard, experience, soft };
+    const recs = [
+      gaps[0] ? `补齐技能：优先学习【${gaps[0]}】并产出作品` : "保持优势，完善项目案例",
+      hard < 70 ? "强化硬技能：围绕JD做2个小项目" : "准备技术亮点总结，量化成果",
+      soft < 70 ? "提升软能力：准备STAR面试故事" : "优化简历表达，突出协作成果"
+    ];
+
+    res.json({ code: 0, data: { report_id: "r-" + Date.now(), radar, recommendations: recs }});
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "error" });
+  }
+});
