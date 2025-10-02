@@ -150,3 +150,29 @@ app.get("/v1/file/download", async (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || "error" });
   }
 });
+
+// ===== Auth: /v1/auth/wx/callback（占位，使用 code 换本地假用户，签发 JWT）=====
+import jwt from "jsonwebtoken";
+const MEM_USERS = new Map(); // key: openid, val: user
+
+function signJWT(payload) {
+  const secret = process.env.JWT_SECRET || "dev-secret";
+  return jwt.sign(payload, secret, { expiresIn: "7d" });
+}
+
+app.get("/v1/auth/wx/callback", (req, res) => {
+  try {
+    const code = String(req.query.code || "");
+    if (!code) return res.status(400).json({ code: 400, msg: "missing code" });
+
+    // 模拟用 code 换 openid（真实环境走微信API）
+    const openid = "wx_" + Buffer.from(code).toString("hex").slice(0,10);
+    const user = MEM_USERS.get(openid) || { id: openid, nickname: "用户" + openid.slice(-4), avatar_url: "" };
+    MEM_USERS.set(openid, user);
+
+    const token = signJWT({ uid: user.id, nick: user.nickname });
+    res.json({ code: 0, msg: "ok", data: { token, user } });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "error" });
+  }
+});
