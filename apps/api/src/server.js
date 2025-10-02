@@ -46,7 +46,6 @@ app.post("/v1/jd/parse", (req, res) => {
     const hit = (list=[]) => list.filter(w => text.includes(w));
     const keywords = Array.from(new Set([...hit(dict.skills||[]), ...hit(dict.soft||[])]));
 
-    // 非严格占位结构
     const result = {
       jd_id: "demo-" + Date.now(),
       keywords,
@@ -57,6 +56,56 @@ app.post("/v1/jd/parse", (req, res) => {
       }
     };
     res.json({ code: 0, data: result });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "error" });
+  }
+});
+
+// 匹配分：基于简历技能 vs JD 关键词的 Jaccard + 必须项命中
+app.post("/v1/match/score", (req, res) => {
+  try {
+    const repoRoot = path.resolve(process.cwd(), "../../");
+    const dictPath = path.join(repoRoot, "data/jd_dict_zh.json");
+    const dict = JSON.parse(fs.readFileSync(dictPath, "utf-8"));
+
+    const body = req.body || {};
+    // 1) 简历数据：若未传，则读取样例 alice.json
+    let resume = body.resume;
+    if (!resume) {
+      const samplePath = path.join(repoRoot, "samples/resume/alice.json");
+      resume = JSON.parse(fs.readFileSync(samplePath, "utf-8"));
+    }
+    // 抽取简历技能集合
+    const resumeSkills = new Set([
+      ...(resume.skills || []).map(s => s.name),
+      ...((resume.work || []).flatMap(w => (w.highlights||[]).join(" "))).flatMap(x=>[])
+    ].filter(Boolean));
+
+    // 2) JD 关键词：优先 body.keywords；否则从 body.jd_text 基于词典提取
+    let jdKeywords = Array.isArray(body.keywords) ? body.keywords : [];
+    if ((!jdKeywords || jdKeywords.length===0) && body.jd_text) {
+      const text = String(body.jd_text);
+      const hit = (list=[]) => list.filter(w => text.includes(w));
+      jdKeywords = Array.from(new Set([...hit(dict.skills||[]), ...hit(dict.soft||[])]));
+    }
+    const jdSet = new Set(jdKeywords);
+
+    // 3) 计算 Jaccard
+    const inter = new Set([...jdSet].filter(x => resumeSkills.has(x)));
+    const union = new Set([...jdSet, ...resumeSkills]);
+    const jaccard = union.size ? inter.size / union.size : 0;
+
+    // 4) 命中 / 缺口（Top3）
+    const hits = [...inter];
+    const gaps = [...jdSet].filter(k => !resumeSkills.has(k)).slice(0, 3);
+
+    // 5) 简单得分：Jaccard*100，若存在 must（=词典skills）未命中，每项-10分
+    const mustSet = new Set((dict.skills||[]).filter(k => jdSet.has(k)));
+    const mustMiss = [...mustSet].filter(k => !resumeSkills.has(k)).length;
+    let score = Math.round(jaccard * 100 - mustMiss * 10);
+    if (score < 0) score = 0;
+
+    res.json({ code: 0, data: { match_score: score, hits, gaps, jd_keywords: [...jdSet], resume_skills: [...resumeSkills] } });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || "error" });
   }
