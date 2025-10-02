@@ -176,3 +176,24 @@ app.get("/v1/auth/wx/callback", (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || "error" });
   }
 });
+
+// ===== JWT 保护中间件 & /v1/users/me =====
+function verifyJWT(req, res, next) {
+  try {
+    const auth = String(req.headers.authorization || "");
+    const m = auth.match(/^Bearer\s+(.+)$/i);
+    if (!m) return res.status(401).json({ code: 401, msg: "missing bearer" });
+    const secret = process.env.JWT_SECRET || "dev-secret";
+    const payload = jwt.verify(m[1], secret);
+    req.user = payload; // { uid, nick, iat, exp }
+    next();
+  } catch (e) {
+    return res.status(401).json({ code: 401, msg: "invalid token" });
+  }
+}
+
+app.get("/v1/users/me", verifyJWT, (req, res) => {
+  const uid = req.user?.uid;
+  const user = MEM_USERS.get(uid) || { id: uid, nickname: req.user?.nick || "" };
+  res.json({ code: 0, data: { user } });
+});
