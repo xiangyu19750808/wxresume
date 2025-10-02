@@ -8,7 +8,8 @@ on:
 
 jobs:
   api-check:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,11 +20,11 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
-
-      - name: Install pnpm (npm global)
-        run: npm i -g pnpm@10.17.1
-
-
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+          standalone: true
 
       - name: Install deps
         run: pnpm install
