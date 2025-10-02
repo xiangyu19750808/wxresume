@@ -9,11 +9,15 @@
     "test": "node -e \"console.log('tests placeholder')\""
   },
   "dependencies": {
-    "express": "^4.19.2",
+    "@prisma/client": "^6.16.3",
     "cors": "^2.8.5",
+    "express": "^4.19.2",
     "helmet": "^7.0.0",
-    "morgan": "^1.10.0",
     "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
     "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "prisma": "^6.16.3"
   }
 }

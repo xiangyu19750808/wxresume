@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DB_URL")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  openid          String   @unique
+  unionid         String?  @unique
+  nickname        String?
+  avatar_url      String?
+  phone           String?
+  email           String?
+  target_position String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  // 反向关联（修复校验错误）
+  Resumes             Resume[]
+  Orders              Order[]
+  JobDescriptions     JobDescription[]
+  CompetencyAnalyses  CompetencyAnalysis[]
+  DiagnosticReports   DiagnosticReport[]
+  Files               FileObject[]
+}
+
+
+model JobDescription {
+  id          String   @id @default(cuid())
+  user_id     String
+  company     String?
+  position    String?
+  raw_text    String
+  parsed_json Json?
+  created_at  DateTime @default(now())
+  User        User     @relation(fields: [user_id], references: [id])
+}
+
+model Resume {
+  id         String   @id @default(cuid())
+  user_id    String
+  base_json  Json
+  created_at DateTime @default(now())
+  User       User     @relation(fields: [user_id], references: [id])
+}
+
+model CompetencyAnalysis {
+  id          String   @id @default(cuid())
+  user_id     String
+  jd_id       String?
+  resume_id   String?
+  match_score Int
+  hits_json   Json?
+  gaps_json   Json?
+  created_at  DateTime @default(now())
+  User        User     @relation(fields: [user_id], references: [id])
+}
+
+model DiagnosticReport {
+  id                     String   @id @default(cuid())
+  user_id                String
+  jd_id                  String?
+  resume_id              String?
+  radar_json             Json?
+  recommendations_json   Json?
+  market_position        Int?
+  created_at             DateTime @default(now())
+  User                   User     @relation(fields: [user_id], references: [id])
+}
+
+model Order {
+  id            String   @id @default(cuid())
+  user_id       String
+  plan          String
+  amount        Int
+  status        String
+  wx_prepay_id  String?
+  out_trade_no  String   @unique
+  paid_at       DateTime?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  User          User     @relation(fields: [user_id], references: [id])
+}
+
+model FileObject {
+  id         String   @id @default(cuid())
+  user_id    String
+  cos_key    String?
+  url        String?
+  status     String?
+  bytes      Int?
+  created_at DateTime @default(now())
+  User       User     @relation(fields: [user_id], references: [id])
+}

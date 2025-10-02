@@ -3,3 +3,6 @@ node_modules
 .DS_Store
 dist
 coverage
+
+# local sqlite db
+apps/api/dev.db
