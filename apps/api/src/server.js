@@ -321,3 +321,14 @@ app.get("/v1/results/:rid", (req, res) => {
   res.json({ code: 0, data: item });
 });
 
+
+// DB ping
+import { prisma } from "./db.js";
+app.get("/v1/db/ping", async (req, res) => {
+  try {
+    const u = await prisma.user.count();
+    res.json({ code: 0, data: { ok: true, users: u } });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "db error" });
+  }
+});
