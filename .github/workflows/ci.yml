@@ -20,13 +20,11 @@ jobs:
           cache: 'pnpm'
 
 
-      - name: Setup pnpm (corepack)
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.17.1 --activate
-          pnpm -v
-
-
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+          standalone: true
 
 
       - name: Install deps
