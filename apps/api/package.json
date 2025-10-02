@@ -2,13 +2,13 @@
   "name": "@wxresume/api",
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/server.js",
-    "build": "echo build-skip",
-    "migrate": "node prisma/migrate.js || true",
-    "seed": "node prisma/seed.js || true",
-    "seed:user": "node src/seed.user.js"，
-    "test": "node -e \"console.log('tests placeholder')\""
-  },
+  "dev": "node --watch src/server.js",
+  "build": "echo build-skip",
+  "migrate": "node prisma/migrate.js || true",
+  "seed": "node prisma/seed.js || true",
+  "seed:user": "node src/seed.user.js",
+  "test": "node -e \"console.log('tests placeholder')\""
+}
   "dependencies": {
     "@prisma/client": "^6.16.3",
     "cors": "^2.8.5",
