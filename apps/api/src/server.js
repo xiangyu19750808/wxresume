@@ -218,3 +218,40 @@ app.post("/v1/order/create", (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || "error" });
   }
 });
+
+// 查询订单状态（占位）
+app.get("/v1/order/status", (req, res) => {
+  try {
+    const out_trade_no = String(req.query.out_trade_no || "");
+    if (!out_trade_no) return res.status(400).json({ code: 400, msg: "missing out_trade_no" });
+    const order = MEM_ORDERS.get(out_trade_no);
+    if (!order) return res.status(404).json({ code: 404, msg: "order not found" });
+    res.json({ code: 0, data: { out_trade_no, status: order.status, amount: order.amount, plan: order.plan } });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "error" });
+  }
+});
+
+// 支付回调占位：将订单置为 paid（真实环境需验签）
+app.post("/v1/order/callback", (req, res) => {
+  try {
+    const { out_trade_no, result = "SUCCESS", amount } = req.body || {};
+    if (!out_trade_no) return res.status(400).json({ code: 400, msg: "missing out_trade_no" });
+    const order = MEM_ORDERS.get(out_trade_no);
+    if (!order) return res.status(404).json({ code: 404, msg: "order not found" });
+    if (result === "SUCCESS") {
+      if (amount != null && Number(amount) !== Number(order.amount)) {
+        return res.status(400).json({ code: 400, msg: "amount mismatch" });
+      }
+      order.status = "paid";
+      order.paid_at = Date.now();
+      MEM_ORDERS.set(out_trade_no, order);
+    } else {
+      order.status = "failed";
+      MEM_ORDERS.set(out_trade_no, order);
+    }
+    res.json({ code: 0, data: { out_trade_no, status: order.status } });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "error" });
+  }
+});
