@@ -344,3 +344,23 @@ app.post("/v1/render/pdf", async (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || "render error" });
   }
 });
+
+// 用模板把简历渲染为 PDF（真实 PDF + 假URL）
+import { resumeToHTML } from "./render.template.js";
+app.post("/v1/render/resume", async (req, res) => {
+  try {
+    const repoRoot = path.resolve(process.cwd(), "../../");
+    const samplePath = path.join(repoRoot, "samples/resume/alice.json");
+    const body = req.body || {};
+    const templateId = body.templateId || "classic";
+    const resume = body.resume || JSON.parse(fs.readFileSync(samplePath, "utf-8"));
+    const html = resumeToHTML(resume, templateId);
+    const buf = await htmlToPDFBuffer(html);
+    const fid = "resume-" + Date.now() + ".pdf";
+    const { getSignedUrl } = await import("../../../packages/adapters/cos/index.js");
+    const url = await getSignedUrl(fid);
+    res.json({ code: 0, data: { file_id: fid, bytes: buf.length, url } });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "render error" });
+  }
+});
