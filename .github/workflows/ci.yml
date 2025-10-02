@@ -2,37 +2,42 @@ name: ci
 
 on:
   push:
-    branches: [main, codex/dev]
+    branches: [ main, codex/dev ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   api-check:
-    runs-on: ubuntu-latest  # 使用 Ubuntu 环境
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '16'  # 选择你的 Node.js 版本，确保与项目兼容
+          node-version: '22'
 
-      - name: Install pnpm
-        run: |
-          curl -fsSL https://get.pnpm.io/install.sh | sh -
-          echo "/home/runner/.local/share/pnpm" >> $GITHUB_PATH  # 使用新的方法设置路径
+      # 官方方式安装 pnpm（standalone 二进制），自动写入 PATH
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+          standalone: true
 
-      - name: Install dependencies
+      - name: Verify pnpm
+        run: pnpm -v
+
+      - name: Install deps
         run: pnpm install
 
       - name: Generate Prisma Client
         working-directory: apps/api
         env:
-          DB_URL: file:./dev.ci.db  # 这里可能需要调整配置路径
+          DB_URL: file:./dev.ci.db
         run: npx prisma generate
 
-      - name: Syntax check (API entry)
+      - name: Basic syntax check (API entry)
         working-directory: apps/api
         run: node -e "require('fs').accessSync('src/server.js')"
