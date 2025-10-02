@@ -18,6 +18,7 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
+    "playwright": "^1.55.1",
     "prisma": "^6.16.3"
   }
 }

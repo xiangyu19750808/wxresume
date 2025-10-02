@@ -332,3 +332,15 @@ app.get("/v1/db/ping", async (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || "db error" });
   }
 });
+
+// 真实PDF渲染：Playwright
+import { htmlToPDFBuffer } from "./render.playwright.js";
+app.post("/v1/render/pdf", async (req, res) => {
+  try {
+    const html = String(req.body?.html || "<h1>Test PDF</h1>");
+    const buf = await htmlToPDFBuffer(html);
+    res.json({ code: 0, data: { bytes: buf.length } });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || "render error" });
+  }
+});
