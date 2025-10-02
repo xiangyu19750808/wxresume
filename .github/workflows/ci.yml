@@ -20,11 +20,9 @@ jobs:
           cache: 'pnpm'
 
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.17.1
-          standalone: true
+      - name: Install pnpm (npm global)
+        run: npm i -g pnpm@10.17.1
+
 
 
       - name: Install deps
