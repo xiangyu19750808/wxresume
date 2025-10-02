@@ -6,6 +6,7 @@
     "build": "echo build-skip",
     "migrate": "node prisma/migrate.js || true",
     "seed": "node prisma/seed.js || true",
+    "seed:user": "node src/seed.user.js"，
     "test": "node -e \"console.log('tests placeholder')\""
   },
   "dependencies": {
