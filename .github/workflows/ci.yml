@@ -22,7 +22,7 @@ jobs:
       - name: Install pnpm
         run: |
           curl -fsSL https://get.pnpm.io/install.sh | sh -
-          echo "::add-path::$(npm bin -g)"  # 确保 pnpm 可执行
+          echo "/home/runner/.local/share/pnpm" >> $GITHUB_PATH  # 使用新的方法设置路径
 
       - name: Install dependencies
         run: pnpm install
