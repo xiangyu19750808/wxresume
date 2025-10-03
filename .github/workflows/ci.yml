@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [ main, codex/dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  api-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 官方方式安装 pnpm（standalone 二进制），自动写入 PATH
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+          standalone: true
+
+      - name: Verify pnpm
+        run: pnpm -v
+
+      - name: Install deps
+        run: pnpm install
+
+      - name: Generate Prisma Client
+        working-directory: apps/api
+        env:
+          DB_URL: file:./dev.ci.db
+        run: npx prisma generate
+
+      - name: Basic syntax check (API entry)
+        working-directory: apps/api
+        run: node -e "require('fs').accessSync('src/server.js')"

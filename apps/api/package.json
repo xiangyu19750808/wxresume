@@ -1,25 +1,26 @@
 {
   "name": "@wxresume/api",
+  "private": true,
   "type": "module",
+  "version": "0.1.0",
+  "main": "src/server.js",
   "scripts": {
-  "dev": "node --watch src/server.js",
-  "build": "echo build-skip",
-  "migrate": "node prisma/migrate.js || true",
-  "seed": "node prisma/seed.js || true",
-  "seed:user": "node src/seed.user.js",
-  "test": "node -e \"console.log('tests placeholder')\""
-}
+    "dev": "node --watch src/server.js",
+    "build": "echo build-skip",
+    "migrate": "node prisma/migrate.js || true",
+    "seed": "node prisma/seed.js || true",
+    "seed:user": "node src/seed.user.js",
+    "test": "node -e \"console.log('tests placeholder')\""
+  },
   "dependencies": {
-    "@prisma/client": "^6.16.3",
+    "@prisma/client": "6.16.3",
     "cors": "^2.8.5",
-    "express": "^4.19.2",
-    "helmet": "^7.0.0",
-    "jsonwebtoken": "^9.0.2",
-    "morgan": "^1.10.0",
-    "uuid": "^9.0.1"
+    "express": "^4.21.2",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
-    "playwright": "^1.55.1",
-    "prisma": "^6.16.3"
+    "playwright": "^1.47.2",
+    "prisma": "6.16.3"
   }
 }

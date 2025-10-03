@@ -1,0 +1,99 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "wxresume API (MVP)", "version": "0.1.0" },
+  "servers": [{ "url": "http://localhost:8080" }],
+  "paths": {
+    "/v1/health": { "get": { "summary": "Health check", "responses": { "200": { "description": "ok" } } } },
+    "/v1/templates": { "get": { "summary": "List resume templates", "responses": { "200": { "description": "ok" } } } },
+    "/v1/jd/parse": {
+      "post": {
+        "summary": "Parse JD (placeholder)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "raw_text": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/v1/match/score": {
+      "post": {
+        "summary": "Compute match score",
+        "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object", "properties": { "keywords": { "type": "array", "items": { "type": "string" } }, "jd_text": { "type": "string" }, "resume": { "type": "object" } } } } } },
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/v1/analysis/report": {
+      "post": {
+        "summary": "Generate analysis report (placeholder)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "analysis": { "type": "object" } } } } } },
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/v1/auth/wx/callback": {
+      "get": {
+        "summary": "WeChat OAuth callback (mock)",
+        "parameters": [{ "name": "code", "in": "query", "schema": { "type": "string" }, "required": true }],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/v1/users/me": {
+      "get": {
+        "summary": "Get current user (JWT)",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "ok" }, "401": { "description": "invalid token" } }
+      }
+    },
+    "/v1/order/create": {
+      "post": {
+        "summary": "Create order (mock)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "plan": { "type": "string" }, "amount": { "type": "integer" } } } } } },
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/v1/order/status": {
+      "get": {
+        "summary": "Query order status (mock)",
+        "parameters": [{ "name": "out_trade_no", "in": "query", "schema": { "type": "string" }, "required": true }],
+        "responses": { "200": { "description": "ok" }, "404": { "description": "not found" } }
+      }
+    },
+    "/v1/order/callback": {
+      "post": {
+        "summary": "Payment callback (mock)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "out_trade_no": { "type": "string" }, "result": { "type": "string" }, "amount": { "type": "integer" } }, "required": ["out_trade_no"] } } } },
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/v1/render/pdf": {
+      "post": {
+        "summary": "Render arbitrary HTML to PDF",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "html": { "type": "string" } }, "required": ["html"] } } } },
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/v1/render/resume": {
+      "post": {
+        "summary": "Render resume JSON via template to PDF",
+        "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object", "properties": { "templateId": { "type": "string" }, "resume": { "type": "object" } } } } } },
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/v1/results": { "get": { "summary": "List results (memory)", "responses": { "200": { "description": "ok" } } } },
+    "/v1/results/{rid}": {
+      "get": {
+        "summary": "Get result by id (memory)",
+        "parameters": [{ "name": "rid", "in": "path", "schema": { "type": "string" }, "required": true }],
+        "responses": { "200": { "description": "ok" }, "404": { "description": "not found" } }
+      }
+    },
+    "/v1/file/download": {
+      "get": {
+        "summary": "Get signed download url (mock)",
+        "parameters": [{ "name": "file_id", "in": "query", "schema": { "type": "string" }, "required": true }],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/v1/db/ping": { "get": { "summary": "DB connectivity check", "responses": { "200": { "description": "ok" } } } },
+    "/v1/openapi.json": { "get": { "summary": "Serve OpenAPI spec", "responses": { "200": { "description": "ok" } } } }
+  },
+  "components": {
+    "securitySchemes": { "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" } }
+  }
+}
