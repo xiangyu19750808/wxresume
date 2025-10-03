@@ -1,12 +1,15 @@
-### 
-- [ ] ?xxx
+### 变更内容
+- [ ] 功能：xxx
 - [ ] 修复：xxx
 - [ ] 文档/脚本
 
 ### 关联
-Closes #编号
+Closes #{issue_id}
 
 ### 自测清单
-- [ ] 本地启动通过（`pnpm -F @wxresume/api dev`）
-- [ ] `scripts/smoke.cmd` 全绿
-- [ ] OpenAPI 与 Postman 自测通过
+- [ ] `pnpm -F @wxresume/api dev` 可启动
+- [ ] `scripts/smoke` 全绿
+- [ ] OpenAPI & Postman 通过
+
+### 备注
+（可选）
