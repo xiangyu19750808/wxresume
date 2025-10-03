@@ -10,3 +10,7 @@ pnpm install
 
 
 
+
+> protection smoke test
+
+> protection smoke test
