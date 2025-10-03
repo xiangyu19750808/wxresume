@@ -11,3 +11,7 @@ apps/api/dev.db
 apps/api/prisma/dev.db
 !apps/api/.env.example
 
+
+# local artifacts
+paid/
+apps/api/paid/
