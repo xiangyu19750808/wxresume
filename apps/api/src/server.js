@@ -3,9 +3,11 @@ import cors from "cors";
 import helmet from "helmet";
 import fs from "fs";
 import path from "path";
+import fileRoutes from "./modules/file/index.js";
 import { listTemplates, renderPDF } from "../../../packages/templates/index.js";
 
 const app = express();
+app.use(fileRoutes);
 app.use(express.json());
 app.use(cors({ origin: true, credentials: true }));
 app.use(helmet());
