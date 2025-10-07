@@ -1,5 +1,4 @@
 import express from "express";
-import cors from "cors";
 import helmet from "helmet";
 import fs from "fs";
 import path from "path";
@@ -18,8 +17,44 @@ if (!JWT_SECRET) {
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: true, credentials: true }));
 app.use(helmet());
+
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (!origin) {
+    return next();
+  }
+
+  if (!ALLOWED_ORIGINS.includes(origin)) {
+    return res.status(403).json({ code: 403, msg: "forbidden" });
+  }
+
+  res.header("Access-Control-Allow-Origin", origin);
+  res.header("Vary", "Origin");
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  const requestHeaders = req.headers["access-control-request-headers"]; // preflight
+  res.header(
+    "Access-Control-Allow-Headers",
+    requestHeaders ? String(requestHeaders) : "Authorization,Content-Type"
+  );
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
 
 app.get("/v1/health", (req, res) => res.json({ code: 0, msg: "ok" }));
 
