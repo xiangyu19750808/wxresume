@@ -85,9 +85,41 @@
     },
     "/v1/file/download": {
       "get": {
-        "summary": "Get signed download url (mock)",
-        "parameters": [{ "name": "file_id", "in": "query", "schema": { "type": "string" }, "required": true }],
-        "responses": { "200": { "description": "ok" } }
+        "summary": "Get a signed COS download URL",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "query",
+            "required": true,
+            "description": "File identifier or COS object key",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed URL generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer", "example": 0 },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "url": { "type": "string", "format": "uri" },
+                        "expiresInSec": { "type": "integer", "example": 180 }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Missing or invalid file_id" },
+          "404": { "description": "File not found" },
+          "500": { "description": "Unexpected server error" }
+        }
       }
     },
     "/v1/db/ping": { "get": { "summary": "DB connectivity check", "responses": { "200": { "description": "ok" } } } },

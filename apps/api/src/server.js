@@ -4,8 +4,21 @@ import helmet from "helmet";
 import fs from "fs";
 import path from "path";
 import { listTemplates, renderPDF } from "../../../packages/templates/index.js";
+import {
+  getDownloadUrl,
+  logFileDownload,
+  FileNotFoundError,
+  FILE_DOWNLOAD_EXPIRES_IN_SECONDS,
+  fileStorageAdapter
+} from "./modules/file/index.js";
 
 const app = express();
+
+if (fileStorageAdapter?.baseDir) {
+  fs.mkdirSync(fileStorageAdapter.baseDir, { recursive: true });
+  app.use("/mock", express.static(fileStorageAdapter.baseDir, { fallthrough: false }));
+}
+
 app.use(express.json());
 app.use(cors({ origin: true, credentials: true }));
 app.use(helmet());
@@ -140,13 +153,30 @@ app.post("/v1/analysis/report", (req, res) => {
 });
 
 // 文件下载占位：?file_id=xxx -> 返回临时URL
-import { getSignedUrl } from "../../../packages/adapters/cos/index.js";
 app.get("/v1/file/download", async (req, res) => {
   try {
-    const fileId = String(req.query.file_id || "demo.pdf");
-    const url = await getSignedUrl(fileId);
-    res.json({ code: 0, data: { url } });
+    const rawId = req.query.file_id;
+    if (typeof rawId !== "string" || rawId.trim() === "") {
+      return res.status(400).json({ code: 400, msg: "missing file_id" });
+    }
+
+    const fileId = rawId.trim();
+    const { url, key } = await getDownloadUrl(fileId);
+
+    logFileDownload({ fileId, key, req });
+
+    res.json({
+      code: 0,
+      data: { url, expiresInSec: FILE_DOWNLOAD_EXPIRES_IN_SECONDS }
+    });
   } catch (e) {
+    if (e instanceof FileNotFoundError) {
+      return res.status(404).json({ code: 404, msg: "file not found" });
+    }
+    if (e instanceof TypeError) {
+      return res.status(400).json({ code: 400, msg: e.message });
+    }
+    console.error("[file.download] unexpected error", e);
     res.status(500).json({ code: 500, msg: e?.message || "error" });
   }
 });

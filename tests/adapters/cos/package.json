@@ -1,0 +1,11 @@
+{
+  "name": "@wxresume/test-adapters-cos",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test cos-fake-adapter.test.js"
+  },
+  "dependencies": {
+    "@wxresume/adapters-cos": "workspace:*"
+  }
+}
