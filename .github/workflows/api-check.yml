@@ -1,0 +1,39 @@
+name: api-check
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/api-check.yml"
+  push:
+    branches: [ main ]
+    paths:
+      - "apps/api/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/api-check.yml"
+
+jobs:
+  api-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+
+      - name: Install deps
+        run: pnpm install --no-frozen-lockfile
+
+      # 先让 CI 跑通；后续需要的话再补充 lint/test/smoke
+      - name: Build placeholder
+        run: echo "ok"
