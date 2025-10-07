@@ -18,3 +18,13 @@ pnpm install
 > protection smoke test
 
 > protection smoke test
+
+> 冒烟脚本（smoke.sh / smoke.cmd）会覆盖“渲染→签名下载→文件存在/bytes>0”的校验
+
+### 环境变量
+
+API 服务使用 `ALLOWED_ORIGINS`（逗号分隔）控制允许的跨域来源，例如：
+
+```bash
+export ALLOWED_ORIGINS="http://localhost:3000,https://saas.example.com"
+```
