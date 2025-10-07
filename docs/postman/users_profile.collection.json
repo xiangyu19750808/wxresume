@@ -1,0 +1,55 @@
+{
+  "info": {
+    "name": "Users profile mock login",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Login with a seeded user_id to obtain a JWT, then fetch the protected profile."
+  },
+  "item": [
+    {
+      "name": "Mock login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": \"<seed-user-id>\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/v1/users/profile",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["v1", "users", "profile"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get profile",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:8080/v1/users/profile",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["v1", "users", "profile"]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string",
+      "description": "Paste the token from the mock login response"
+    }
+  ]
+}
