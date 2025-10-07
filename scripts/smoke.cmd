@@ -30,7 +30,54 @@ powershell -NoLogo -NoProfile -Command "$b=@{html='<div style=\"font-size:24px\"
 
 
 echo === render.resume ===
-curl -s -X POST "%BASE%/v1/render/resume" -H "Content-Type: application/json" -d "{\"templateId\":\"classic\"}" & echo.
+set "RESUME_RESP="
+set "FILE_ID="
+for /f "usebackq tokens=1* delims=|" %%A in (`powershell -NoLogo -NoProfile -Command "$body=@{templateId='classic'} | ConvertTo-Json; $resp=Invoke-RestMethod -Uri '%BASE%/v1/render/resume' -Method Post -ContentType 'application/json' -Body $body; $json=$resp | ConvertTo-Json -Compress; Write-Output ('JSON|' + $json); Write-Output ('FILE_ID|' + $resp.data.file_id)"`) do (
+  if "%%A"=="JSON" set "RESUME_RESP=%%B"
+  if "%%A"=="FILE_ID" set "FILE_ID=%%B"
+)
+echo !RESUME_RESP!
+if not defined FILE_ID (
+  echo !RESUME_RESP!
+  echo Failed to parse render.resume response
+  exit /b 1
+)
+
+echo === file.download ===
+set "DOWNLOAD_RESP="
+set "SIGNED_URL="
+for /f "usebackq tokens=1* delims=|" %%A in (`powershell -NoLogo -NoProfile -Command "$resp=Invoke-RestMethod -Uri '%BASE%/v1/file/download?file_id=%FILE_ID%'; $json=$resp | ConvertTo-Json -Compress; Write-Output ('JSON|' + $json); Write-Output ('URL|' + $resp.data.url)"`) do (
+  if "%%A"=="JSON" set "DOWNLOAD_RESP=%%B"
+  if "%%A"=="URL" set "SIGNED_URL=%%B"
+)
+echo !DOWNLOAD_RESP!
+if not defined SIGNED_URL (
+  echo !DOWNLOAD_RESP!
+  echo Failed to parse file.download response
+  exit /b 1
+)
+
+set "TMPFILE=%TEMP%\wxresume-smoke-download.tmp"
+curl -s -f -L "!SIGNED_URL!" -o "!TMPFILE!"
+if errorlevel 1 (
+  echo !DOWNLOAD_RESP!
+  echo Download failed
+  del /f /q "!TMPFILE!" >NUL 2>&1
+  exit /b 1
+)
+
+set "DOWNLOAD_SIZE="
+for %%I in ("!TMPFILE!") do set "DOWNLOAD_SIZE=%%~zI"
+if not defined DOWNLOAD_SIZE set "DOWNLOAD_SIZE=0"
+if "!DOWNLOAD_SIZE!"=="0" (
+  echo !DOWNLOAD_RESP!
+  echo Downloaded file is empty
+  del /f /q "!TMPFILE!" >NUL 2>&1
+  exit /b 1
+)
+
+echo download.bytes=!DOWNLOAD_SIZE!
+del /f /q "!TMPFILE!" >NUL 2>&1
 
 echo === results.save(DB) ===
 curl -s -X POST "%BASE%/v1/results/save" -H "Content-Type: application/json" -d "{\"user_id\":\"%USER%\",\"match\":{\"match_score\":30},\"report\":{\"radar\":{\"hard\":30}},\"file\":{\"file_id\":\"x.pdf\",\"bytes\":12345}}" & echo.

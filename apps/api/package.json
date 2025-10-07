@@ -10,7 +10,7 @@
     "migrate": "node prisma/migrate.js || true",
     "seed": "node prisma/seed.js || true",
     "seed:user": "node src/seed.user.js",
-    "test": "node -e \"console.log('tests placeholder')\""
+    "test": "node --test"
   },
   "dependencies": {
     "@prisma/client": "6.16.3",
