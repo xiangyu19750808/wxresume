@@ -40,6 +40,98 @@
         "responses": { "200": { "description": "ok" }, "401": { "description": "invalid token" } }
       }
     },
+    "/v1/users/profile": {
+      "post": {
+        "summary": "Mock login to obtain JWT",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "user_id": { "type": "string", "description": "Existing user id" }
+                },
+                "required": ["user_id"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer", "example": 0 },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "token": { "type": "string", "description": "Signed JWT" },
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "email": { "type": "string", "format": "email" },
+                            "nickname": { "type": "string" },
+                            "created_at": { "type": "string", "format": "date-time" }
+                          }
+                        }
+                      },
+                      "required": ["token", "user"]
+                    }
+                  },
+                  "required": ["code", "data"]
+                }
+              }
+            }
+          },
+          "400": { "description": "user_id missing" },
+          "404": { "description": "user not found" },
+          "500": { "description": "internal error" }
+        }
+      },
+      "get": {
+        "summary": "Get profile via JWT",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Profile payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer", "example": 0 },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "email": { "type": "string", "format": "email" },
+                            "nickname": { "type": "string" },
+                            "created_at": { "type": "string", "format": "date-time" }
+                          }
+                        }
+                      },
+                      "required": ["user"]
+                    }
+                  },
+                  "required": ["code", "data"]
+                }
+              }
+            }
+          },
+          "401": { "description": "missing or invalid JWT" },
+          "404": { "description": "user not found" },
+          "500": { "description": "internal error" }
+        }
+      }
+    },
     "/v1/order/create": {
       "post": {
         "summary": "Create order (mock)",

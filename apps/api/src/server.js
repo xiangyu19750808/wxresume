@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 import { listTemplates, renderPDF } from "../../../packages/templates/index.js";
 import jwtMiddleware from "./middlewares/jwt.js";
 
+
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
@@ -150,8 +151,7 @@ app.post("/v1/analysis/report", (req, res) => {
 });
 
 // 文件下载占位：?file_id=xxx -> 返回临时URL
-import { registerFileModule } from "./modules/file/index.js";
-registerFileModule(app);
+
 
 // ===== Auth: /v1/auth/wx/callback（占位，使用 code 换本地假用户，签发 JWT）=====
 const MEM_USERS = new Map(); // key: openid, val: user
