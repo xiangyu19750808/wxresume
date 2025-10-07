@@ -18,6 +18,7 @@ on:
 jobs:
   api-check:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,23 +27,27 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
+          cache: 'pnpm'   # 使用 pnpm 缓存，加速安装
 
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v2
-      with:
-        version: 8
-        run_install: false
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
 
-    - run: pnpm -v
-
-
-      - name: Enable corepack (pnpm)
-        run: corepack enable
-
-      - name: Install deps
+      # 关键修复：CI 环境下默认启用 frozen-lockfile，这里显式关闭以避免
+      # “ERR_PNPM_OUTDATED_LOCKFILE” 报错
+      - name: Install dependencies (no frozen lockfile)
         run: pnpm install --no-frozen-lockfile
 
-      # 先让 CI 跑通；后续需要的话再补充 lint/test/smoke
-      - name: Build placeholder
-        run: echo "ok"
+      - name: Show versions
+        run: |
+          node -v
+          pnpm -v
+
+      # 如果各工作区定义了 build/test，会运行；未定义则跳过（if-present）
+      - name: Build (if present)
+        run: pnpm -r --if-present build
+
+      - name: Test (if present)
+        run: pnpm -r --if-present test
