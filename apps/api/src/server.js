@@ -1,3 +1,4 @@
+import { createRouter as createUsersRouter } from "./modules/users/index.js";
 import express from "express";
 import helmet from "helmet";
 import fs from "fs";
@@ -5,8 +6,7 @@ import path from "path";
 import jwt from "jsonwebtoken";
 import { listTemplates, renderPDF } from "../../../packages/templates/index.js";
 import jwtMiddleware from "./middlewares/jwt.js";
-import { registerFileModule } from "./modules/file/index.js";
-import { registerUsersModule } from "./modules/users/index.js";
+
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -18,7 +18,48 @@ if (!JWT_SECRET) {
 
 const app = express();
 app.use(express.json());
+
 app.use(helmet());
+app.use(createUsersRouter());
+
+
+
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (!origin) {
+    return next();
+  }
+
+  if (!ALLOWED_ORIGINS.includes(origin)) {
+    return res.status(403).json({ code: 403, msg: "forbidden" });
+  }
+
+  res.header("Access-Control-Allow-Origin", origin);
+  res.header("Vary", "Origin");
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  const requestHeaders = req.headers["access-control-request-headers"]; // preflight
+  res.header(
+    "Access-Control-Allow-Headers",
+    requestHeaders ? String(requestHeaders) : "Authorization,Content-Type"
+  );
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
@@ -187,10 +228,7 @@ app.post("/v1/analysis/report", (req, res) => {
 });
 
 // 文件下载占位：?file_id=xxx -> 返回临时URL
-registerFileModule(app);
 
-// 用户模块：mock 登录 & 受控读取 profile
-registerUsersModule(app);
 
 // ===== Auth: /v1/auth/wx/callback（占位，使用 code 换本地假用户，签发 JWT）=====
 const MEM_USERS = new Map(); // key: openid, val: user

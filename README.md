@@ -21,15 +21,3 @@ pnpm install
 
 > 冒烟脚本（smoke.sh / smoke.cmd）会覆盖“渲染→签名下载→文件存在/bytes>0”的校验
 
-### 环境变量
-
-API 服务使用 `ALLOWED_ORIGINS`（逗号分隔）控制允许的跨域来源，例如：
-
-```bash
-export ALLOWED_ORIGINS="http://localhost:3000,https://saas.example.com"
-```
-
-### OpenAPI 合约
-
-- 运行 `pnpm api:openapi:lint` 校验规范，CI 亦会执行相同步骤。
-- 开发态可通过 `pnpm dlx @redocly/openapi-cli preview-docs apps/api/openapi.yaml` 预览 Redoc/Swagger UI。
