@@ -27,16 +27,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
 
-      # 让 action-setup 自动读取 package.json 的 "packageManager"
-      - name: Setup pnpm (from packageManager)
-        uses: pnpm/action-setup@v4
-        with:
-          run_install: false
-
-      - name: Show pnpm version
-        run: pnpm -v
+      # ★ 用 corepack 安装并激活 pnpm（版本与 package.json 的 packageManager 保持一致）
+      - name: Setup pnpm via corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@8.15.7 --activate
+          pnpm -v
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
