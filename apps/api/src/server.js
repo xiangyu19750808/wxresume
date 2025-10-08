@@ -1,3 +1,4 @@
+import { createRouter as createUsersRouter } from "./modules/users/index.js";
 import express from "express";
 import helmet from "helmet";
 import fs from "fs";
@@ -17,7 +18,11 @@ if (!JWT_SECRET) {
 
 const app = express();
 app.use(express.json());
+
 app.use(helmet());
+app.use(createUsersRouter());
+
+
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
