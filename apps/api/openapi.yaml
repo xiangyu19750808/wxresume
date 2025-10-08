@@ -1,18 +1,1230 @@
-openapi: 3.0.0
+openapi: 3.0.3
 info:
   title: wxresume API
-  version: 0.1.0
+  version: 0.2.0
+  description: |
+    API contract for the wxresume prototype service. All responses use a
+    `{ code, data?, msg? }` envelope where `code === 0` indicates success.
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://api.example.com
+    description: Example production base URL
+security:
+  - {}
+tags:
+  - name: Health
+    description: Service health and diagnostics
+  - name: Templates
+    description: Resume template discovery and rendering helpers
+  - name: Resume Rendering
+    description: HTML/PDF rendering flows
+  - name: JD Parsing
+    description: Parsing and scoring of job descriptions
+  - name: Analysis
+    description: Resume analysis and reporting helpers
+  - name: Files
+    description: Signed download links and assets
+  - name: Users
+    description: Authentication and user profile APIs
+  - name: Orders
+    description: SaaS order management mocks
+  - name: Results
+    description: Career result storage mocks
+  - name: Misc
+    description: Auxiliary APIs
 paths:
   /v1/health:
     get:
+      tags: [Health]
       summary: Health check
+      description: Returns a simple ok payload when the API is ready.
       responses:
         '200':
-          description: ok
+          description: The service is healthy.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  code: { type: integer }
-                  msg: { type: string }
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/db/ping:
+    get:
+      tags: [Health]
+      summary: Database connectivity probe
+      description: Checks that Prisma can reach the configured database.
+      responses:
+        '200':
+          description: Database connection succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DbPingResponse'
+        '500':
+          description: Database access failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                dbError:
+                  value:
+                    code: 500
+                    msg: db error
+  /v1/templates:
+    get:
+      tags: [Templates]
+      summary: List resume templates
+      responses:
+        '200':
+          description: Template manifest entries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/file/download:
+    get:
+      tags: [Files]
+      summary: Request a signed download URL for a generated file
+      parameters:
+        - $ref: '#/components/parameters/FileIdQuery'
+      responses:
+        '200':
+          description: Signed download URL issued successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileDownloadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/render/mock:
+    post:
+      tags: [Resume Rendering]
+      summary: Render a demo resume PDF buffer in memory
+      responses:
+        '200':
+          description: Rendering succeeded and returned the byte length.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderMockResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/render/pdf:
+    post:
+      tags: [Resume Rendering]
+      summary: Render arbitrary HTML into a PDF buffer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenderPdfRequest'
+      responses:
+        '200':
+          description: Rendering succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderPdfResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/render/resume:
+    post:
+      tags: [Resume Rendering]
+      summary: Render a resume via template and return a signed URL
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenderResumeRequest'
+      responses:
+        '200':
+          description: Resume rendered and uploaded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderResumeResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/jd/parse:
+    post:
+      tags: [JD Parsing]
+      summary: Parse a job description and extract keywords
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JdParseRequest'
+      responses:
+        '200':
+          description: Keywords and structured requirements extracted from the JD.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JdParseResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/match/score:
+    post:
+      tags: [JD Parsing]
+      summary: Compute a resume-vs-JD match score
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchScoreRequest'
+      responses:
+        '200':
+          description: Match scoring metrics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchScoreResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/analysis/report:
+    post:
+      tags: [Analysis]
+      summary: Generate an analysis report from match metrics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisReportRequest'
+      responses:
+        '200':
+          description: High level report summary for the resume.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisReportResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/auth/wx/callback:
+    get:
+      tags: [Users]
+      summary: Complete a mocked WeChat OAuth login
+      parameters:
+        - $ref: '#/components/parameters/AuthCodeQuery'
+      responses:
+        '200':
+          description: Mocked WeChat login succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthCallbackResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/users/me:
+    get:
+      tags: [Users]
+      summary: Retrieve the current JWT-authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Active user details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/users/profile:
+    post:
+      tags: [Users]
+      summary: Mock login for a seeded user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileLoginRequest'
+      responses:
+        '200':
+          description: Login succeeded and returned a JWT along with the profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileLoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Users]
+      summary: Retrieve a stored user profile (JWT protected)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile fetched from the database.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/order/create:
+    post:
+      tags: [Orders]
+      summary: Create a mock SaaS order
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+      responses:
+        '200':
+          description: Order created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCreateResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/order/status:
+    get:
+      tags: [Orders]
+      summary: Query a mock order status
+      parameters:
+        - $ref: '#/components/parameters/OutTradeNoQuery'
+      responses:
+        '200':
+          description: Current status for the order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/order/callback:
+    post:
+      tags: [Orders]
+      summary: Simulate a payment callback for an order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCallbackRequest'
+      responses:
+        '200':
+          description: Order status updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCallbackResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/results/demo:
+    post:
+      tags: [Results]
+      summary: Generate a demo result in memory
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResultsDemoRequest'
+      responses:
+        '200':
+          description: Demo result created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultItemResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/results:
+    get:
+      tags: [Results]
+      summary: List in-memory demo results
+      responses:
+        '200':
+          description: Chronologically sorted result list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultListResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/results/db:
+    get:
+      tags: [Results]
+      summary: List persisted results for a user
+      parameters:
+        - $ref: '#/components/parameters/UserIdQuery'
+      responses:
+        '200':
+          description: Result rows stored in the database.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultDbListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          description: Database query failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                dbError:
+                  value:
+                    code: 500
+                    msg: db error
+  /v1/results/{rid}:
+    get:
+      tags: [Results]
+      summary: Retrieve a demo result by ID
+      parameters:
+        - $ref: '#/components/parameters/ResultIdPath'
+      responses:
+        '200':
+          description: Result found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultItemResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/results/save:
+    post:
+      tags: [Results]
+      summary: Persist a result to the database
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResultsSaveRequest'
+      responses:
+        '200':
+          description: Result persisted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultsSaveResponse'
+        '500':
+          description: Database persistence failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                dbError:
+                  value:
+                    code: 500
+                    msg: db error
+  /v1/openapi.json:
+    get:
+      tags: [Misc]
+      summary: Download the OpenAPI document in JSON
+      responses:
+        '200':
+          description: Raw OpenAPI JSON document.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenApiDocument'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    FileIdQuery:
+      name: file_id
+      in: query
+      required: true
+      schema:
+        type: string
+      description: Identifier of the file to download.
+    AuthCodeQuery:
+      name: code
+      in: query
+      required: true
+      schema:
+        type: string
+      description: Authorization code provided by the WeChat login flow.
+    OutTradeNoQuery:
+      name: out_trade_no
+      in: query
+      required: true
+      schema:
+        type: string
+      description: Unique identifier of the order to query.
+    UserIdQuery:
+      name: user_id
+      in: query
+      required: true
+      schema:
+        type: string
+      description: User identifier to filter result history.
+    ResultIdPath:
+      name: rid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Result identifier previously returned by the demo generator.
+  responses:
+    BadRequest:
+      description: The request parameters were invalid or incomplete.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missingParam:
+              value:
+                code: 400
+                msg: missing parameter
+    Unauthorized:
+      description: A valid JWT token is required.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            unauthorized:
+              value:
+                code: 401
+                msg: unauthorized
+    Forbidden:
+      description: The request origin is not allowed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            forbidden:
+              value:
+                code: 403
+                msg: forbidden
+    NotFound:
+      description: The requested resource could not be found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            notFound:
+              value:
+                code: 404
+                msg: not found
+    InternalError:
+      description: An unexpected error occurred.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            internalError:
+              value:
+                code: 500
+                msg: internal error
+            renderError:
+              value:
+                code: 500
+                msg: render error
+  schemas:
+    ApiEnvelope:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: integer
+          description: Zero for success, non-zero for errors.
+        msg:
+          type: string
+          description: Optional human readable message.
+          nullable: true
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, msg]
+          properties:
+            code:
+              type: integer
+              enum: [400, 401, 403, 404, 500]
+            msg:
+              type: string
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, msg]
+          properties:
+            code:
+              type: integer
+              example: 0
+            msg:
+              type: string
+              example: ok
+    DbPingResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: object
+              required: [ok, users]
+              properties:
+                ok:
+                  type: boolean
+                  example: true
+                users:
+                  type: integer
+                  minimum: 0
+                  example: 1
+    TemplateSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          example: classic
+        name:
+          type: string
+          example: 经典单栏
+        preview:
+          type: string
+          description: Relative preview asset path.
+          example: templates/classic/preview.png
+    TemplateListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/TemplateSummary'
+    FileDownloadPayload:
+      type: object
+      required: [url, expiresInSec]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Time-limited download URL.
+        expiresInSec:
+          type: integer
+          minimum: 1
+          example: 180
+    FileDownloadResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              $ref: '#/components/schemas/FileDownloadPayload'
+    RenderMockResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, bytes]
+          properties:
+            code:
+              type: integer
+              example: 0
+            bytes:
+              type: integer
+              minimum: 0
+              description: Number of bytes in the rendered PDF buffer.
+    RenderPdfRequest:
+      type: object
+      properties:
+        html:
+          type: string
+          description: Raw HTML string to render (defaults to a demo heading when omitted).
+          example: <h1>Hello</h1>
+    RenderPdfResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: object
+              required: [bytes]
+              properties:
+                bytes:
+                  type: integer
+                  minimum: 0
+    RenderResumeRequest:
+      type: object
+      properties:
+        templateId:
+          type: string
+          description: Template identifier (defaults to classic).
+        resume:
+          type: object
+          description: Resume JSON payload.
+          additionalProperties: true
+    RenderResumeFile:
+      type: object
+      required: [file_id, bytes, url]
+      properties:
+        file_id:
+          type: string
+        bytes:
+          type: integer
+          minimum: 0
+        url:
+          type: string
+          format: uri
+    RenderResumeResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              $ref: '#/components/schemas/RenderResumeFile'
+    JdParseRequest:
+      type: object
+      properties:
+        raw_text:
+          type: string
+          description: Raw job description text to parse (defaults to empty string).
+    RequirementsSummary:
+      type: object
+      required: [must, nice]
+      properties:
+        must:
+          type: array
+          items:
+            type: string
+        nice:
+          type: array
+          items:
+            type: string
+        exp_years:
+          type: string
+          nullable: true
+          description: Text snippet describing required experience.
+    JdParseResult:
+      type: object
+      required: [jd_id, keywords, requirements]
+      properties:
+        jd_id:
+          type: string
+          example: demo-171111
+        keywords:
+          type: array
+          items:
+            type: string
+        requirements:
+          $ref: '#/components/schemas/RequirementsSummary'
+    JdParseResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              $ref: '#/components/schemas/JdParseResult'
+    MatchScoreRequest:
+      type: object
+      properties:
+        keywords:
+          type: array
+          items:
+            type: string
+        jd_text:
+          type: string
+        resume:
+          type: object
+          additionalProperties: true
+    MatchScoreResult:
+      type: object
+      required: [match_score, hits, gaps, jd_keywords, resume_skills]
+      properties:
+        match_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        hits:
+          type: array
+          items:
+            type: string
+        gaps:
+          type: array
+          items:
+            type: string
+        jd_keywords:
+          type: array
+          items:
+            type: string
+        resume_skills:
+          type: array
+          items:
+            type: string
+    MatchScoreResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              $ref: '#/components/schemas/MatchScoreResult'
+    AnalysisReportRequest:
+      type: object
+      properties:
+        analysis:
+          type: object
+          properties:
+            match_score:
+              type: integer
+            hits:
+              type: array
+              items:
+                type: string
+            gaps:
+              type: array
+              items:
+                type: string
+    RadarBreakdown:
+      type: object
+      required: [hard, experience, soft]
+      properties:
+        hard:
+          type: integer
+          minimum: 0
+          maximum: 100
+        experience:
+          type: integer
+          minimum: 0
+          maximum: 100
+        soft:
+          type: integer
+          minimum: 0
+          maximum: 100
+    AnalysisReport:
+      type: object
+      required: [report_id, radar, recommendations]
+      properties:
+        report_id:
+          type: string
+        radar:
+          $ref: '#/components/schemas/RadarBreakdown'
+        recommendations:
+          type: array
+          items:
+            type: string
+    AnalysisReportResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              $ref: '#/components/schemas/AnalysisReport'
+    AuthUser:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        nickname:
+          type: string
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+          format: uri
+        role:
+          type: string
+          example: user
+    AuthCallbackResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            msg:
+              type: string
+              example: ok
+            data:
+              type: object
+              required: [token, user]
+              properties:
+                token:
+                  type: string
+                user:
+                  $ref: '#/components/schemas/AuthUser'
+    UserProfile:
+      type: object
+      required: [id, email, nickname, created_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        nickname:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    UserProfileLoginRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+    UserProfileLoginResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: object
+              required: [token, user]
+              properties:
+                token:
+                  type: string
+                user:
+                  $ref: '#/components/schemas/UserProfile'
+    UserProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: object
+              required: [user]
+              properties:
+                user:
+                  $ref: '#/components/schemas/UserProfile'
+    UserMeResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: object
+              required: [user]
+              properties:
+                user:
+                  $ref: '#/components/schemas/AuthUser'
+    OrderCreateRequest:
+      type: object
+      properties:
+        plan:
+          type: string
+          example: basic
+        amount:
+          type: integer
+          example: 1990
+    OrderCreateResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: object
+              required: [out_trade_no, prepay_id]
+              properties:
+                out_trade_no:
+                  type: string
+                prepay_id:
+                  type: string
+    OrderStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: object
+              required: [out_trade_no, status, amount, plan]
+              properties:
+                out_trade_no:
+                  type: string
+                status:
+                  type: string
+                  enum: [created, paid, failed]
+                amount:
+                  type: integer
+                plan:
+                  type: string
+    OrderCallbackRequest:
+      type: object
+      required: [out_trade_no]
+      properties:
+        out_trade_no:
+          type: string
+        result:
+          type: string
+          enum: [SUCCESS, FAILED]
+          default: SUCCESS
+        amount:
+          type: integer
+          nullable: true
+    OrderCallbackResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: object
+              required: [out_trade_no, status]
+              properties:
+                out_trade_no:
+                  type: string
+                status:
+                  type: string
+                  enum: [created, paid, failed]
+    ResultReport:
+      type: object
+      required: [radar, recommendations]
+      properties:
+        radar:
+          $ref: '#/components/schemas/RadarBreakdown'
+        recommendations:
+          type: array
+          items:
+            type: string
+    MatchSummary:
+      type: object
+      required: [match_score, hits, gaps]
+      properties:
+        match_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        hits:
+          type: array
+          items:
+            type: string
+        gaps:
+          type: array
+          items:
+            type: string
+    ResultFile:
+      type: object
+      properties:
+        file_id:
+          type: string
+        bytes:
+          type: integer
+          minimum: 0
+        url:
+          type: string
+          format: uri
+    ResultItem:
+      type: object
+      required: [rid, user_id, match, report, file, created_at]
+      properties:
+        rid:
+          type: string
+        user_id:
+          type: string
+        match:
+          $ref: '#/components/schemas/MatchSummary'
+        report:
+          $ref: '#/components/schemas/ResultReport'
+        file:
+          $ref: '#/components/schemas/ResultFile'
+        created_at:
+          type: integer
+          description: Unix timestamp in milliseconds.
+    ResultItemResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              $ref: '#/components/schemas/ResultItem'
+    ResultListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ResultItem'
+    ResultDbRecord:
+      type: object
+      required: [id, user_id, match, report, created_at]
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: string
+        match:
+          type: object
+          additionalProperties: true
+        report:
+          type: object
+          additionalProperties: true
+        file_id:
+          type: string
+          nullable: true
+        bytes:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    ResultDbListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ResultDbRecord'
+    ResultsDemoRequest:
+      type: object
+      properties:
+        jd_text:
+          type: string
+          description: Optional JD text used for keyword extraction.
+    ResultsSaveRequest:
+      type: object
+      properties:
+        user_id:
+          type: string
+          default: demo
+        match:
+          type: object
+          additionalProperties: true
+        report:
+          type: object
+          additionalProperties: true
+        file:
+          type: object
+          properties:
+            file_id:
+              type: string
+            bytes:
+              type: integer
+              nullable: true
+    ResultsSaveResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: integer
+              example: 0
+            data:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: integer
+    OpenApiDocument:
+      type: object
+      description: Generic OpenAPI document payload.
+      additionalProperties: true

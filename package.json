@@ -6,6 +6,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "migrate": "pnpm --filter @wxresume/api migrate",
-    "seed": "pnpm --filter @wxresume/api seed"
+    "seed": "pnpm --filter @wxresume/api seed",
+    "api:openapi:lint": "pnpm dlx @redocly/openapi-cli lint apps/api/openapi.yaml"
   }
 }

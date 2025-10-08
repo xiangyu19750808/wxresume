@@ -1,0 +1,27 @@
+name: API Contract Checks
+
+on:
+  pull_request:
+    paths:
+      - 'apps/api/openapi.yaml'
+      - '.github/workflows/api-check.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+jobs:
+  openapi-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate OpenAPI document
+        run: pnpm dlx @redocly/openapi-cli validate apps/api/openapi.yaml
