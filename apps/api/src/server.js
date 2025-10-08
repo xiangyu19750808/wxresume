@@ -1,5 +1,5 @@
+import { createRouter as createUsersRouter } from "./modules/users/index.js";
 import express from "express";
-import cors from "cors";
 import helmet from "helmet";
 import fs from "fs";
 import path from "path";
@@ -18,8 +18,39 @@ if (!JWT_SECRET) {
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: true, credentials: true }));
+// --- CORS (strict whitelist) ---
+const ALLOWED = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const isAllowed = origin && ALLOWED.includes(origin);
+
+  if (isAllowed) {
+    res.header("Access-Control-Allow-Origin", origin);
+    res.header("Vary", "Origin, Access-Control-Request-Headers");
+    res.header("Access-Control-Allow-Credentials", "true");
+    res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
+    res.header(
+      "Access-Control-Allow-Headers",
+      req.headers["access-control-request-headers"] || "Content-Type, Authorization"
+    );
+  }
+
+  if (req.method === "OPTIONS") {
+    // 仅对白名单放行预检；非白名单 403
+    return isAllowed ? res.sendStatus(204) : res.sendStatus(403);
+  }
+
+  return next();
+});
+
 app.use(helmet());
+app.use(createUsersRouter());
+
+
 
 app.get("/v1/health", (req, res) => res.json({ code: 0, msg: "ok" }));
 
