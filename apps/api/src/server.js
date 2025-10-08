@@ -18,39 +18,48 @@ if (!JWT_SECRET) {
 
 const app = express();
 app.use(express.json());
-// --- CORS (strict whitelist) ---
-const ALLOWED = (process.env.ALLOWED_ORIGINS || "")
-  .split(",")
-  .map(s => s.trim())
-  .filter(Boolean);
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  const isAllowed = origin && ALLOWED.includes(origin);
-
-  if (isAllowed) {
-    res.header("Access-Control-Allow-Origin", origin);
-    res.header("Vary", "Origin, Access-Control-Request-Headers");
-    res.header("Access-Control-Allow-Credentials", "true");
-    res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
-    res.header(
-      "Access-Control-Allow-Headers",
-      req.headers["access-control-request-headers"] || "Content-Type, Authorization"
-    );
-  }
-
-  if (req.method === "OPTIONS") {
-    // 仅对白名单放行预检；非白名单 403
-    return isAllowed ? res.sendStatus(204) : res.sendStatus(403);
-  }
-
-  return next();
-});
 
 app.use(helmet());
 app.use(createUsersRouter());
 
 
+
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (!origin) {
+    return next();
+  }
+
+  if (!ALLOWED_ORIGINS.includes(origin)) {
+    return res.status(403).json({ code: 403, msg: "forbidden" });
+  }
+
+  res.header("Access-Control-Allow-Origin", origin);
+  res.header("Vary", "Origin");
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  const requestHeaders = req.headers["access-control-request-headers"]; // preflight
+  res.header(
+    "Access-Control-Allow-Headers",
+    requestHeaders ? String(requestHeaders) : "Authorization,Content-Type"
+  );
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
 
 app.get("/v1/health", (req, res) => res.json({ code: 0, msg: "ok" }));
 
