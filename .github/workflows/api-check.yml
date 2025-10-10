@@ -27,14 +27,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      # 用 corepack 安装并激活与 package.json 对齐的 pnpm
       - name: Setup pnpm via corepack
         run: |
           corepack enable
-          # 与根 package.json 的 packageManager 保持一致
           corepack prepare pnpm@8.15.7 --activate
           pnpm -v
 
