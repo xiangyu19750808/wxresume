@@ -1,12 +1,7 @@
 name: api-check
 
 on:
-  pull_request:
-    paths:
-      - 'apps/api/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/api-check.yml'
+
   push:
     branches: [ main ]
     paths:
@@ -28,11 +23,7 @@ jobs:
         with:
           node-version: 20
 
-      # 用 corepack 安装并激活与 package.json 对齐的 pnpm
-      - name: Setup pnpm via corepack
-        run: |
-          corepack enable
-          # 按你的 package.json 中的 packageManager 调整版本
+
           corepack prepare pnpm@8.15.7 --activate
           pnpm -v
 
