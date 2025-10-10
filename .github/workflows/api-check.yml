@@ -2,12 +2,23 @@ name: api-check
 
 on:
   pull_request:
+    paths:
+      - 'apps/api/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/api-check.yml'
   push:
     branches: [ main ]
+    paths:
+      - 'apps/api/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/api-check.yml'
 
 jobs:
   api-check:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,11 +28,15 @@ jobs:
         with:
           node-version: 20
 
-      # ✅ 同样用 NPX 调 pnpm
-      - name: Install deps (pnpm via npx)
+      # 用 corepack 安装并激活与 package.json/包管理器对齐的 pnpm
+      - name: Setup pnpm via corepack
         run: |
-          npx -y pnpm@8.15.7 -v
-          npx -y pnpm@8.15.7 install --no-frozen-lockfile
+          corepack enable
+          corepack prepare pnpm@8.15.7 --activate
+          pnpm -v
+
+      - name: Install deps
+        run: pnpm install --no-frozen-lockfile
 
       - name: Lint OpenAPI
-        run: npx -y pnpm@8.15.7 api:openapi:lint
+        run: pnpm api:openapi:lint
