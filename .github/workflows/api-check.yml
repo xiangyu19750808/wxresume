@@ -1,0 +1,34 @@
+name: api-check
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  api-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      # 使用 corepack 激活与 package.json 对齐的 pnpm（避免和 action-setup 版本冲突）
+      - name: Setup pnpm via corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@8.15.7 --activate
+          pnpm -v
+
+      - name: Install deps
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Lint OpenAPI
+        run: pnpm api:openapi:lint
