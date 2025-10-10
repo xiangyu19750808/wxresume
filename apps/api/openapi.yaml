@@ -1,11 +1,19 @@
 openapi: 3.0.0
+servers:
+  - url: http://localhost:8080
+
 info:
   title: wxresume API
   version: 0.1.0
+  description: API for wxresume system
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 paths:
   /v1/health:
     get:
       summary: Health check
+      operationId: healthCheck 
       responses:
         '200':
           description: ok
@@ -14,5 +22,29 @@ paths:
               schema:
                 type: object
                 properties:
-                  code: { type: integer }
-                  msg: { type: string }
+                  code:
+                    type: integer
+                  msg:
+                    type: string
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  msg:
+                    type: string
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  msg:
+                    type: string
