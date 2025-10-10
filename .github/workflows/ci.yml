@@ -2,12 +2,8 @@ name: ci
 
 on:
   pull_request:
-    paths:
-      - '**'
   push:
     branches: [ main ]
-    paths:
-      - '**'
 
 jobs:
   build:
@@ -23,20 +19,19 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - name: Ensure pnpm on PATH
-        shell: bash
+      # 关键：用 corepack 安装并激活与 package.json 对齐的 pnpm 版本
+      - name: Setup pnpm (via corepack)
         run: |
-          set -e
-          corepack enable || true
-          corepack prepare pnpm@8.15.7 --activate || true
-          if ! command -v pnpm >/dev/null 2>&1; then
-            npm i -g pnpm@8.15.7
-          fi
+          corepack enable
+          corepack prepare pnpm@8.15.7 --activate
           pnpm -v
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      # 你在 ci.yml 里需要做的事情放到这里
-      # - name: Run tests
+      # 下面按你的需要执行构建/测试；示例：
+      # - name: Build
+      #   run: pnpm -r build
+      #
+      # - name: Test
       #   run: pnpm -r test
