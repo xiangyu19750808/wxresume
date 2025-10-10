@@ -27,20 +27,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
 
-      # 安装/激活 pnpm（先 corepack，失败再全局 npm 安装兜底）
-      - name: Ensure pnpm on PATH
+      # 关键：用 corepack 激活与 package.json 对齐的 pnpm
+      - name: Setup pnpm via corepack
         shell: bash
         run: |
-          set -e
-          echo "Trying corepack..."
-          corepack enable || true
-          corepack prepare pnpm@8.15.7 --activate || true
-          if ! command -v pnpm >/dev/null 2>&1; then
-            echo "corepack didn't expose pnpm, installing via npm..."
-            npm i -g pnpm@8.15.7
-          fi
+          corepack enable
+          corepack prepare pnpm@8.15.7 --activate
           pnpm -v
 
       - name: Install deps
