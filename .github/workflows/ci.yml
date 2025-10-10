@@ -2,12 +2,38 @@ name: ci
 
 on:
   pull_request:
+    branches: [ main ]
+    # 只在这些路径变化时触发，减少无效运行
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci.yml"
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [ main ]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci.yml"
+
+# 最小权限原则
+permissions:
+  contents: read
+
+# 同一分支并发运行时自动取消旧的那一次（去抖）
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # 注意：ID 必须是 build，这样状态检查名才是 “ci / build (pull_request)”
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -17,16 +43,24 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          # 启用 pnpm 缓存（基于 lockfile）
+          cache: 'pnpm'
 
-      # ✅ 用 NPX 调用 pnpm，零依赖、绝对可用
-      - name: Install dependencies (pnpm via npx)
-        shell: bash
+      # 用 corepack 与根 package.json 的 packageManager 对齐 pnpm 版本
+      - name: Setup pnpm via corepack
         run: |
-          npx -y pnpm@8.15.7 -v
-          npx -y pnpm@8.15.7 install --no-frozen-lockfile
+          corepack enable
+          # 与根 package.json 中的 packageManager 一致（pnpm@8.15.7）
+          corepack prepare pnpm@8.15.7 --activate
+          pnpm -v
 
-      # 如果你要 build / test，照下面这样写（同样用 npx 调 pnpm）
-      # - name: Build
-      #   run: npx -y pnpm@8.15.7 -r build
-      # - name: Test
-      #   run: npx -y pnpm@8.15.7 -r test
+      - name: Install deps
+        run: pnpm install --no-frozen-lockfile
+
+      # 这里可按需扩展更多包的构建/检查
+      - name: Build API package
+        run: pnpm --filter @wxresume/api build
+
+      # 如需跑测试，可解开（若暂无测试可保留注释）
+      # - name: Test (all)
+      #   run: pnpm -r test
