@@ -17,19 +17,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
+          cache: 'pnpm'   # 这行无害，后面我们手动装 pnpm，也能利用缓存
 
-      # 关键：用 corepack 安装并激活与 package.json 对齐的 pnpm 版本
-      - name: Setup pnpm (via corepack)
+      # ✅ 关键：用 npm 全局安装 pnpm（与 package.json 的 packageManager 版本一致）
+      - name: Install pnpm globally
         run: |
-          corepack enable
-          corepack prepare pnpm@8.15.7 --activate
+          npm i -g pnpm@8.15.7
           pnpm -v
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      # 示例：按你的需要继续跑 build / test
+      # 下面按你的需要继续（没需要就先不写）
       # - name: Build
       #   run: pnpm -r build
       # - name: Test
