@@ -18,3 +18,6 @@ pnpm install
 > protection smoke test
 
 > protection smoke test
+
+> 冒烟脚本（smoke.sh / smoke.cmd）会覆盖“渲染→签名下载→文件存在/bytes>0”的校验
+

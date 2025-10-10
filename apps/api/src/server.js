@@ -1,16 +1,66 @@
+import { createRouter as createUsersRouter } from "./modules/users/index.js";
 import express from "express";
-import cors from "cors";
 import helmet from "helmet";
 import fs from "fs";
 import path from "path";
-import fileRoutes from "./modules/file/index.js";
+
 import { listTemplates, renderPDF } from "../../../packages/templates/index.js";
+import jwtMiddleware from "./middlewares/jwt.js";
+
+
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  const message = "JWT_SECRET environment variable is required";
+  console.error(message);
+  throw new Error(message);
+}
 
 const app = express();
 app.use(fileRoutes);
 app.use(express.json());
-app.use(cors({ origin: true, credentials: true }));
+
 app.use(helmet());
+app.use(createUsersRouter());
+
+
+
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (!origin) {
+    return next();
+  }
+
+  if (!ALLOWED_ORIGINS.includes(origin)) {
+    return res.status(403).json({ code: 403, msg: "forbidden" });
+  }
+
+  res.header("Access-Control-Allow-Origin", origin);
+  res.header("Vary", "Origin");
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  const requestHeaders = req.headers["access-control-request-headers"]; // preflight
+  res.header(
+    "Access-Control-Allow-Headers",
+    requestHeaders ? String(requestHeaders) : "Authorization,Content-Type"
+  );
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
 
 app.get("/v1/health", (req, res) => res.json({ code: 0, msg: "ok" }));
 
@@ -142,24 +192,13 @@ app.post("/v1/analysis/report", (req, res) => {
 });
 
 // 文件下载占位：?file_id=xxx -> 返回临时URL
-import { getSignedUrl } from "../../../packages/adapters/cos/index.js";
-app.get("/v1/file/download", async (req, res) => {
-  try {
-    const fileId = String(req.query.file_id || "demo.pdf");
-    const url = await getSignedUrl(fileId);
-    res.json({ code: 0, data: { url } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || "error" });
-  }
-});
+
 
 // ===== Auth: /v1/auth/wx/callback（占位，使用 code 换本地假用户，签发 JWT）=====
-import jwt from "jsonwebtoken";
 const MEM_USERS = new Map(); // key: openid, val: user
 
 function signJWT(payload) {
-  const secret = process.env.JWT_SECRET || "dev-secret";
-  return jwt.sign(payload, secret, { expiresIn: "7d" });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
 }
 
 app.get("/v1/auth/wx/callback", (req, res) => {
@@ -169,10 +208,10 @@ app.get("/v1/auth/wx/callback", (req, res) => {
 
     // 模拟用 code 换 openid（真实环境走微信API）
     const openid = "wx_" + Buffer.from(code).toString("hex").slice(0,10);
-    const user = MEM_USERS.get(openid) || { id: openid, nickname: "用户" + openid.slice(-4), avatar_url: "" };
+    const user = MEM_USERS.get(openid) || { id: openid, nickname: "用户" + openid.slice(-4), avatar_url: "", role: "user" };
     MEM_USERS.set(openid, user);
 
-    const token = signJWT({ uid: user.id, nick: user.nickname });
+    const token = signJWT({ id: user.id, role: user.role || "user" });
     res.json({ code: 0, msg: "ok", data: { token, user } });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || "error" });
@@ -180,23 +219,9 @@ app.get("/v1/auth/wx/callback", (req, res) => {
 });
 
 // ===== JWT 保护中间件 & /v1/users/me =====
-function verifyJWT(req, res, next) {
-  try {
-    const auth = String(req.headers.authorization || "");
-    const m = auth.match(/^Bearer\s+(.+)$/i);
-    if (!m) return res.status(401).json({ code: 401, msg: "missing bearer" });
-    const secret = process.env.JWT_SECRET || "dev-secret";
-    const payload = jwt.verify(m[1], secret);
-    req.user = payload; // { uid, nick, iat, exp }
-    next();
-  } catch (e) {
-    return res.status(401).json({ code: 401, msg: "invalid token" });
-  }
-}
-
-app.get("/v1/users/me", verifyJWT, (req, res) => {
-  const uid = req.user?.uid;
-  const user = MEM_USERS.get(uid) || { id: uid, nickname: req.user?.nick || "" };
+app.get("/v1/users/me", jwtMiddleware, (req, res) => {
+  const uid = req.user?.id;
+  const user = MEM_USERS.get(uid) || { id: uid, nickname: "", role: req.user?.role };
   res.json({ code: 0, data: { user } });
 });
 

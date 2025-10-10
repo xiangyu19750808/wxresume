@@ -1,0 +1,40 @@
+name: api-check
+
+on:
+  # 让所有 PR 都跑 api-check，避免 Required 但未触发的“Expected”状态
+  pull_request:
+    branches: [ main ]
+
+  # push 到 main 时也跑一次（可保留 paths 以节省资源）
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/api/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/api-check.yml'
+
+jobs:
+  api-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm via corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@8.15.7 --activate
+          pnpm -v
+
+      - name: Install deps
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Lint OpenAPI
+        run: pnpm api:openapi:lint

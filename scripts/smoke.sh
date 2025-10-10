@@ -35,8 +35,40 @@ curl -s -X POST ${BASE}/v1/render/pdf -H "Content-Type: application/json" \
   -d '{"html":"<div style=\"font-size:24px\">Smoke Test PDF</div>"}'; echo
 
 echo "=== render.resume ==="
-curl -s -X POST ${BASE}/v1/render/resume -H "Content-Type: application/json" \
-  -d '{"templateId":"classic"}'; echo
+RESUME_RESP=$(curl -s -X POST ${BASE}/v1/render/resume -H "Content-Type: application/json" \
+  -d '{"templateId":"classic"}')
+echo "$RESUME_RESP"
+FILE_ID=$(node -e 'const raw = process.argv[2]; try { const obj = JSON.parse(raw); const id = obj?.data?.file_id; if (!id) process.exit(1); process.stdout.write(id); } catch (e) { process.exit(1); }' "--" "$RESUME_RESP") || {
+  echo "$RESUME_RESP"
+  echo "Failed to parse render.resume response"
+  exit 1
+}
+
+echo "=== file.download ==="
+DOWNLOAD_RESP=$(curl -s "${BASE}/v1/file/download?file_id=${FILE_ID}")
+echo "$DOWNLOAD_RESP"
+SIGNED_URL=$(node -e 'const raw = process.argv[2]; try { const obj = JSON.parse(raw); const url = obj?.data?.url; if (!url) process.exit(1); process.stdout.write(url); } catch (e) { process.exit(1); }' "--" "$DOWNLOAD_RESP") || {
+  echo "$DOWNLOAD_RESP"
+  echo "Failed to parse file.download response"
+  exit 1
+}
+
+TMP_FILE=$(mktemp)
+trap 'rm -f "$TMP_FILE"' EXIT
+if ! curl -fsSL "$SIGNED_URL" -o "$TMP_FILE"; then
+  echo "$DOWNLOAD_RESP"
+  echo "Download failed"
+  exit 1
+fi
+
+if [ ! -s "$TMP_FILE" ]; then
+  echo "$DOWNLOAD_RESP"
+  echo "Downloaded file is empty"
+  exit 1
+fi
+
+DOWNLOAD_BYTES=$(wc -c < "$TMP_FILE")
+echo "download.bytes=${DOWNLOAD_BYTES}"
 
 echo "=== results.save(DB) ==="
 curl -s -X POST ${BASE}/v1/results/save -H "Content-Type: application/json" \

@@ -10,12 +10,12 @@
     "migrate": "node prisma/migrate.js || true",
     "seed": "node prisma/seed.js || true",
     "seed:user": "node src/seed.user.js",
-    "test": "node -e \"console.log('tests placeholder')\""
+    "test": "node --test"
   },
   "dependencies": {
     "@prisma/client": "6.16.3",
     "cors": "^2.8.5",
-    "express": "^4.21.2",
+    "express": "^5.1.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2"
   },
