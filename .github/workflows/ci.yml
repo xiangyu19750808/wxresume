@@ -17,19 +17,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'   # 这行无害，后面我们手动装 pnpm，也能利用缓存
 
-      # ✅ 关键：用 npm 全局安装 pnpm（与 package.json 的 packageManager 版本一致）
-      - name: Install pnpm globally
+      # ✅ 用 NPX 调用 pnpm，零依赖、绝对可用
+      - name: Install dependencies (pnpm via npx)
+        shell: bash
         run: |
-          npm i -g pnpm@8.15.7
-          pnpm -v
+          npx -y pnpm@8.15.7 -v
+          npx -y pnpm@8.15.7 install --no-frozen-lockfile
 
-      - name: Install deps
-        run: pnpm install --no-frozen-lockfile
-
-      # 下面按你的需要继续（没需要就先不写）
+      # 如果你要 build / test，照下面这样写（同样用 npx 调 pnpm）
       # - name: Build
-      #   run: pnpm -r build
+      #   run: npx -y pnpm@8.15.7 -r build
       # - name: Test
-      #   run: pnpm -r test
+      #   run: npx -y pnpm@8.15.7 -r test
