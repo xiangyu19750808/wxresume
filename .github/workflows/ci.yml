@@ -21,17 +21,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: pnpm
 
-      - name: Setup pnpm via corepack
+      - name: Ensure pnpm on PATH
+        shell: bash
         run: |
-          corepack enable
-          corepack prepare pnpm@8.15.7 --activate
+          set -e
+          corepack enable || true
+          corepack prepare pnpm@8.15.7 --activate || true
+          if ! command -v pnpm >/dev/null 2>&1; then
+            npm i -g pnpm@8.15.7
+          fi
           pnpm -v
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      # 你原本在 ci.yml 里需要执行的步骤放在这里
+      # 你在 ci.yml 里需要做的事情放到这里
       # - name: Run tests
       #   run: pnpm -r test
