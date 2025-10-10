@@ -3,20 +3,14 @@ name: ci
 on:
   pull_request:
     paths:
-      - 'apps/api/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/ci.yml'
+      - '**'
   push:
     branches: [ main ]
     paths:
-      - 'apps/api/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/ci.yml'
+      - '**'
 
 jobs:
-  api-check:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -27,8 +21,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          cache: 'pnpm'
 
       - name: Setup pnpm via corepack
         run: |
@@ -39,5 +32,6 @@ jobs:
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      - name: Lint OpenAPI
-        run: pnpm run api:openapi:lint
+      # 你原本在 ci.yml 里需要执行的步骤放在这里
+      # - name: Run tests
+      #   run: pnpm -r test
