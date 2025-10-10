@@ -1,11 +1,14 @@
 {
   "name": "wxresume",
   "private": true,
+  "packageManager": "pnpm@8.15.7",
   "scripts": {
     "dev:api": "pnpm --filter @wxresume/api dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "migrate": "pnpm --filter @wxresume/api migrate",
-    "seed": "pnpm --filter @wxresume/api seed"
+    "seed": "pnpm --filter @wxresume/api seed",
+
+    "api:openapi:lint": "pnpm dlx @redocly/openapi-cli@latest lint apps/api/openapi.yaml"
   }
 }

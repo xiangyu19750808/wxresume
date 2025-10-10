@@ -1,4 +1,4 @@
-name: ci
+name: api-check
 
 on:
   pull_request:
@@ -6,9 +6,8 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  api-check:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,15 +17,11 @@ jobs:
         with:
           node-version: 20
 
-      # ✅ 用 NPX 调用 pnpm，零依赖、绝对可用
-      - name: Install dependencies (pnpm via npx)
-        shell: bash
+      # ✅ 同样用 NPX 调 pnpm
+      - name: Install deps (pnpm via npx)
         run: |
           npx -y pnpm@8.15.7 -v
           npx -y pnpm@8.15.7 install --no-frozen-lockfile
 
-      # 如果你要 build / test，照下面这样写（同样用 npx 调 pnpm）
-      # - name: Build
-      #   run: npx -y pnpm@8.15.7 -r build
-      # - name: Test
-      #   run: npx -y pnpm@8.15.7 -r test
+      - name: Lint OpenAPI
+        run: npx -y pnpm@8.15.7 api:openapi:lint
