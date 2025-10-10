@@ -1,6 +1,12 @@
 name: ci
 
+name: ci
+
 on:
+  # 先加上手动触发，防止路径不命中时不好触发
+  workflow_dispatch:
+
+  # 保留 PR 触发
   pull_request:
     branches: [ main ]
     paths:
@@ -9,22 +15,6 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - ".github/workflows/ci.yml"
-    types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [ main ]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/ci.yml"
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   # ID 一定要叫 build，这样状态检查名才是 “ci / build (pull_request)”

@@ -1,12 +1,11 @@
 name: api-check
 
 on:
+  # 让所有 PR 都跑 api-check，避免 Required 但未触发的“Expected”状态
   pull_request:
-    paths:
-      - 'apps/api/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/api-check.yml'
+    branches: [ main ]
+
+  # push 到 main 时也跑一次（可保留 paths 以节省资源）
   push:
     branches: [ main ]
     paths:
@@ -28,7 +27,6 @@ jobs:
         with:
           node-version: 20
 
-      # 用 corepack 安装并激活与 package.json/包管理器对齐的 pnpm
       - name: Setup pnpm via corepack
         run: |
           corepack enable
