@@ -2,12 +2,35 @@ name: ci
 
 on:
   pull_request:
+    branches: [ main ]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci.yml"
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [ main ]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # ID 一定要叫 build，这样状态检查名才是 “ci / build (pull_request)”
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -17,16 +40,34 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          # ⚠️ 不要 cache: 'pnpm'，否则会在 pnpm 激活前调用 pnpm 导致找不到可执行文件
 
-      # ✅ 用 NPX 调用 pnpm，零依赖、绝对可用
-      - name: Install dependencies (pnpm via npx)
-        shell: bash
+      # 激活 pnpm（与根 package.json 的 packageManager 对齐）
+      - name: Setup pnpm via corepack
         run: |
-          npx -y pnpm@8.15.7 -v
-          npx -y pnpm@8.15.7 install --no-frozen-lockfile
+          corepack enable
+          corepack prepare pnpm@8.15.7 --activate
+          pnpm -v
 
-      # 如果你要 build / test，照下面这样写（同样用 npx 调 pnpm）
-      # - name: Build
-      #   run: npx -y pnpm@8.15.7 -r build
-      # - name: Test
-      #   run: npx -y pnpm@8.15.7 -r test
+      # （可选）在激活 pnpm 之后再做缓存
+      - name: Resolve pnpm store path
+        id: store
+        shell: bash
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install deps
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build API package
+        run: pnpm --filter @wxresume/api build
+
+      # - name: Test (all)
+      #   run: pnpm -r test
