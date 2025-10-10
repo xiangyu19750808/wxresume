@@ -1,18 +1,13 @@
-name: ci
+name: api-check
 
 on:
   pull_request:
-    paths:
-      - 'apps/**'
-      - 'packages/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/ci.yml'
+  push:
+    branches: [ main ]
 
 jobs:
-  build:
+  api-check:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,17 +17,11 @@ jobs:
         with:
           node-version: 20
 
-      # 关键：同样激活 pnpm
-      - name: Setup pnpm via corepack
-        shell: bash
+      # ✅ 同样用 NPX 调 pnpm
+      - name: Install deps (pnpm via npx)
         run: |
-          corepack enable
-          corepack prepare pnpm@8.15.7 --activate
-          pnpm -v
+          npx -y pnpm@8.15.7 -v
+          npx -y pnpm@8.15.7 install --no-frozen-lockfile
 
-      - name: Install deps
-        run: pnpm install --no-frozen-lockfile
-
-      # 看你的项目目前 build 是 no-op；加一个“容错构建”，避免无脚本时报错
-      - name: Build (no-op safe)
-        run: pnpm -r build || true
+      - name: Lint OpenAPI
+        run: npx -y pnpm@8.15.7 api:openapi:lint
