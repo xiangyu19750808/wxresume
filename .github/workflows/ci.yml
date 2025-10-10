@@ -1,9 +1,27 @@
 name: ci
 
+name: ci
+
 on:
+  # 先加上手动触发，防止路径不命中时不好触发
+  workflow_dispatch:
+
+  # 保留 PR 触发
   pull_request:
+    branches: [ main ]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci.yml"
+
+  # ✅ 关键：确保 push 到 main 一定能触发（临时放宽到 repo 根）
   push:
     branches: [ main ]
+    paths:
+      - "**"     # 先用 **，保证任何提交到 main 都能触发（稍后可以再收紧）
+
 
 jobs:
   build:
