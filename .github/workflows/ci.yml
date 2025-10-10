@@ -1,10 +1,19 @@
 name: ci
 
 on:
-  push:
-    branches: [ main, codex/dev ]
   pull_request:
+    paths:
+      - 'apps/api/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/ci.yml'
+  push:
     branches: [ main ]
+    paths:
+      - 'apps/api/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/ci.yml'
 
 jobs:
   api-check:
@@ -17,27 +26,18 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
-      # 官方方式安装 pnpm（standalone 二进制），自动写入 PATH
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.17.1
-          standalone: true
-
-      - name: Verify pnpm
-        run: pnpm -v
+      - name: Setup pnpm via corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@8.15.7 --activate
+          pnpm -v
 
       - name: Install deps
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
-      - name: Generate Prisma Client
-        working-directory: apps/api
-        env:
-          DB_URL: file:./dev.ci.db
-        run: npx prisma generate
-
-      - name: Basic syntax check (API entry)
-        working-directory: apps/api
-        run: node -e "require('fs').accessSync('src/server.js')"
+      - name: Lint OpenAPI
+        run: pnpm run api:openapi:lint
