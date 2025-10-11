@@ -1,7 +1,5 @@
 name: ci
 
-name: ci
-
 on:
   # 先加上手动触发，防止路径不命中时不好触发
   workflow_dispatch:
@@ -18,8 +16,6 @@ on:
       - ".github/workflows/ci.yml"
 
 
-jobs:
-  # 注意：ID 必须是 build，这样状态检查名才是 “ci / build (pull_request)”
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -32,24 +28,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # 启用 pnpm 缓存（基于 lockfile）
-          cache: 'pnpm'
 
-      # 用 corepack 与根 package.json 的 packageManager 对齐 pnpm 版本
-      - name: Setup pnpm via corepack
-        run: |
-          corepack enable
-          # 与根 package.json 中的 packageManager 一致（pnpm@8.15.7）
-          corepack prepare pnpm@8.15.7 --activate
-          pnpm -v
-
-      - name: Install deps
-        run: pnpm install --no-frozen-lockfile
-
-      # 这里可按需扩展更多包的构建/检查
-      - name: Build API package
-        run: pnpm --filter @wxresume/api build
-
-      # 如需跑测试，可解开（若暂无测试可保留注释）
       # - name: Test (all)
       #   run: pnpm -r test

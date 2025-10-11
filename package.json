@@ -12,3 +12,4 @@
     "api:openapi:lint": "pnpm dlx @redocly/openapi-cli@latest lint apps/api/openapi.yaml"
   }
 }
+
