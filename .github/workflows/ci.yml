@@ -2,10 +2,8 @@ name: ci
 
 
 on:
-  # 先加上手动触发，防止路径不命中时不好触发
   workflow_dispatch:
 
-  # 保留 PR 触发
   pull_request:
     branches: [ main ]
     paths:
@@ -15,16 +13,15 @@ on:
       - "pnpm-lock.yaml"
       - ".github/workflows/ci.yml"
 
-  # ✅ 关键：确保 push 到 main 一定能触发（临时放宽到 repo 根）
   push:
     branches: [ main ]
     paths:
-      - "**"     # 先用 **，保证任何提交到 main 都能触发（稍后可以再收紧）
-
+      - "**"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -35,15 +32,13 @@ jobs:
         with:
           node-version: 20
 
-      # ✅ 用 NPX 调用 pnpm，零依赖、绝对可用
       - name: Install dependencies (pnpm via npx)
-        shell: bash
         run: |
           npx -y pnpm@8.15.7 -v
           npx -y pnpm@8.15.7 install --no-frozen-lockfile
 
-      # 如果你要 build / test，照下面这样写（同样用 npx 调 pnpm）
       # - name: Build
       #   run: npx -y pnpm@8.15.7 -r build
+
       # - name: Test
       #   run: npx -y pnpm@8.15.7 -r test
