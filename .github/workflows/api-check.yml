@@ -1,7 +1,6 @@
 name: api-check
 
 on:
-
   workflow_dispatch:
   pull_request:
     branches: [ main ]
@@ -18,7 +17,6 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/api-check.yml'
-      
 
 jobs:
   api-check:
@@ -33,7 +31,8 @@ jobs:
         with:
           node-version: 20
 
-
+      - name: Setup pnpm
+        run: |
           corepack prepare pnpm@8.15.7 --activate
           pnpm -v
 
