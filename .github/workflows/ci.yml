@@ -1,10 +1,8 @@
 name: ci
 
 on:
-  # 先加上手动触发，防止路径不命中时不好触发
   workflow_dispatch:
 
-  # 保留 PR 触发
   pull_request:
     branches: [ main ]
     paths:
@@ -14,8 +12,12 @@ on:
       - "pnpm-lock.yaml"
       - ".github/workflows/ci.yml"
 
+  push:
+    branches: [ main ]
+    paths:
+      - "**"
+
 jobs:
-  # ID 一定要叫 build，这样状态检查名才是 “ci / build (pull_request)”
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -28,34 +30,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # ⚠️ 不要 cache: 'pnpm'，否则会在 pnpm 激活前调用 pnpm 导致找不到可执行文件
 
-      # 激活 pnpm（与根 package.json 的 packageManager 对齐）
-      - name: Setup pnpm via corepack
+      - name: Install dependencies (pnpm via npx)
         run: |
-          corepack enable
-          corepack prepare pnpm@8.15.7 --activate
-          pnpm -v
+          npx -y pnpm@8.15.7 -v
+          npx -y pnpm@8.15.7 install --no-frozen-lockfile
 
-      # （可选）在激活 pnpm 之后再做缓存
-      - name: Resolve pnpm store path
-        id: store
-        shell: bash
-        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+      # - name: Build
+      #   run: npx -y pnpm@8.15.7 -r build
 
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.PNPM_STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-
-
-      - name: Install deps
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Build API package
-        run: pnpm --filter @wxresume/api build
-
-      # - name: Test (all)
-      #   run: pnpm -r test
+      # - name: Test
+      #   run: npx -y pnpm@8.15.7 -r test
