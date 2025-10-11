@@ -1,13 +1,10 @@
 name: ci
 
 on:
-  # 先加上手动触发，防止路径不命中时不好触发
   workflow_dispatch:
 
-  # 保留 PR 触发
   pull_request:
     branches: [ main ]
-
     paths:
       - "apps/**"
       - "packages/**"
@@ -15,7 +12,12 @@ on:
       - "pnpm-lock.yaml"
       - ".github/workflows/ci.yml"
 
+  push:
+    branches: [ main ]
+    paths:
+      - "**"
 
+jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -29,6 +31,13 @@ on:
         with:
           node-version: 20
 
-      # - name: Test (all)
-      #   run: pnpm -r test
+      - name: Install dependencies (pnpm via npx)
+        run: |
+          npx -y pnpm@8.15.7 -v
+          npx -y pnpm@8.15.7 install --no-frozen-lockfile
 
+      # - name: Build
+      #   run: npx -y pnpm@8.15.7 -r build
+
+      # - name: Test
+      #   run: npx -y pnpm@8.15.7 -r test
