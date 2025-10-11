@@ -2,7 +2,7 @@ name: api-check
 
 on:
 
-    pull_request:
+  pull_request:
     branches: [ main ]
     paths:
       - 'apps/api/**'
