@@ -3,7 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import fs from "fs";
 import path from "path";
-import jwt from "jsonwebtoken";
+
 import { listTemplates, renderPDF } from "../../../packages/templates/index.js";
 import jwtMiddleware from "./middlewares/jwt.js";
 
@@ -17,6 +17,7 @@ if (!JWT_SECRET) {
 }
 
 const app = express();
+app.use(fileRoutes);
 app.use(express.json());
 
 app.use(helmet());
