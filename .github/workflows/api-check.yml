@@ -33,9 +33,11 @@ jobs:
 
       - name: Setup pnpm
         run: |
+          corepack enable
           corepack prepare pnpm@8.15.7 --activate
           pnpm -v
 
+  
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
