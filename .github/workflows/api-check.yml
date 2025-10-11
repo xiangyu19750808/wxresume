@@ -2,6 +2,14 @@ name: api-check
 
 on:
 
+    pull_request:
+    branches: [ main ]
+    paths:
+      - 'apps/api/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/api-check.yml'
+
   push:
     branches: [ main ]
     paths:
@@ -9,6 +17,7 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/api-check.yml'
+      
 
 jobs:
   api-check:
