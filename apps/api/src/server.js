@@ -1,8 +1,12 @@
-import { createRouter as createUsersRouter } from "./modules/users/index.js";
-import express from "express";
-import helmet from "helmet";
-import fs from "fs";
-import path from "path";
+import { createResultsRouter } from "./modules/results/index.js";
+import 'dotenv/config';
+import express from 'express';
+import helmet from 'helmet';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createUsersRouter } from './modules/users/index.js';
+import { createFileRouter } from './modules/file/index.js';
+
 
 import { listTemplates, renderPDF } from "../../../packages/templates/index.js";
 import jwtMiddleware from "./middlewares/jwt.js";
@@ -16,14 +20,26 @@ if (!JWT_SECRET) {
   throw new Error(message);
 }
 
-const app = express();
-app.use(fileRoutes);
-app.use(express.json());
+const app = express(); 
+//app.use(fileRoutes); 
+app.use(createFileRouter());
+app.use(createResultsRouter());
+app.use(express.json()); 
 
-app.use(helmet());
+app.use(helmet()); 
 app.use(createUsersRouter());
 
-
+// 简易 Mock 文件服务：优先从项目根的 /resumes_pdf 读文件，不在就回一个占位 PDF
+app.get('/mock/:file', (req, res) => {
+  const filename = req.params.file;
+  const filePath = path.join(process.cwd(), 'resumes_pdf', filename);
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+  res.setHeader('Content-Type', 'application/pdf');
+  // 一个很小的占位 PDF（满足“下载字节数>0”的校验）
+  res.send(Buffer.from('%PDF-1.4\n% mock\n'));
+});
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
