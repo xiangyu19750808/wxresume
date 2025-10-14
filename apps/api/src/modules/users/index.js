@@ -40,3 +40,13 @@ export function createUsersRouter() {
 
   return router;
 }
+
+// ===== keep this =====
+export function registerUsersModule(app, options = {}) {
+  const router = createRouter(options);
+  app.use(router);
+}
+
+export { createRouter };
+export { createRouter as createUsersRouter };
+
