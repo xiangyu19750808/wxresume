@@ -87,3 +87,5 @@ export function registerUsersModule(app, options = {}) {
 }
 
 export { createRouter };
+export { createRouter as createUsersRouter };
+
