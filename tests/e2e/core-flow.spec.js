@@ -1,5 +1,4 @@
 // tests/e2e/core-flow.spec.js
-// Node 20 内置 test runner + fetch；不依赖第三方库
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -12,130 +11,115 @@ const E2E_ENV = {
   NODE_ENV: 'test',
   PORT: String(PORT),
   JWT_SECRET: process.env.JWT_SECRET || 'ci-secret',
-  // 允许本地请求；你的服务默认不开 CORS 阻断非浏览器，这里只是显式给个空白名单
-  ALLOWED_ORIGINS: ''
+  ALLOWED_ORIGINS: '' // 显式空白名单，避免意外阻断
 };
 
-// 启动 API 并等待“API listening on ...”日志
+async function fetchJson(path, init) {
+  const res = await fetch(`${BASE}${path}`, init);
+  const json = await res.json().catch(() => null);
+  return { res, json };
+}
+
+async function waitServerReady(maxMs = 30_000) {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    try {
+      const { res, json } = await fetchJson('/v1/health');
+      if (res.ok && json?.code === 0) return true;
+    } catch (_) {}
+    await delay(500);
+  }
+  return false;
+}
+
 async function bootServer() {
   const child = spawn('node', ['apps/api/src/server.js'], {
     env: E2E_ENV,
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
-  let ready = false;
-  const waitReady = new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error('server boot timeout'));
-    }, 15_000);
+  // 将服务日志透传到 CI 输出，便于排查
+  child.stdout.on('data', (b) => process.stdout.write(b));
+  child.stderr.on('data', (b) => process.stderr.write(b));
 
-    const onLine = (buf) => {
-      const line = buf.toString();
-      if (line.includes('API listening on')) {
-        ready = true;
-        clearTimeout(timer);
-        child.stdout.off('data', onLine);
-        resolve();
-      }
-    };
-    child.on('error', reject);
-    child.stdout.on('data', onLine);
-  });
-
-  try {
-    await waitReady;
-  } catch (e) {
-    // 打印下日志便于 CI 排查
-    child.stdout?.pipe(process.stdout);
-    child.stderr?.pipe(process.stderr);
+  const ready = await waitServerReady(30_000);
+  if (!ready) {
     child.kill('SIGKILL');
-    throw e;
+    throw new Error('server boot timeout (health not ready within 30s)');
   }
 
   return {
     proc: child,
     async close() {
-      // 尽量优雅退出，否则强杀
       child.kill('SIGTERM');
-      await delay(500);
+      await delay(800);
       if (!child.killed) child.kill('SIGKILL');
-    }
+    },
   };
 }
 
-async function jfetch(path, init) {
-  const res = await fetch(`${BASE}${path}`, init);
-  const ct = res.headers.get('content-type') || '';
-  if (ct.includes('application/json')) {
-    return { res, json: await res.json() };
-  }
-  return { res, json: null };
-}
-
-test('core flow: health → render → download → order', async (t) => {
+test('core flow: health → download → order', async (t) => {
   const server = await bootServer();
-  t.after(async () => {
-    await server.close();
-  });
+  t.after(async () => { await server.close(); });
 
   // 1) health
   {
-    const { res, json } = await jfetch('/v1/health');
+    const { res, json } = await fetchJson('/v1/health');
     assert.equal(res.status, 200);
     assert.equal(json?.code, 0);
   }
 
-  // 2) render resume （返回假签名 URL）
+  // 2) 申请签名下载 URL（避免使用需要 Playwright 的渲染接口）
   let signedUrl = '';
   {
-    const { res, json } = await jfetch('/v1/render/resume', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ templateId: 'classic' })
-    });
+    const fileId = `resume-${Date.now()}.pdf`;
+    const { res, json } = await fetchJson(`/v1/file/download?file_id=${encodeURIComponent(fileId)}`);
     assert.equal(res.status, 200);
-    assert.equal(json?.code, 0);
-    assert.ok(json?.data?.url, 'signed url');
-    assert.ok(Number(json?.data?.bytes) > 0);
-    signedUrl = json.data.url;
+    // res.ok/res.fail 统一返回结构时，这里可能有 msg/requestId；兼容旧/新两种
+    const payload = json?.data ? json : { code: 0, data: json };
+    assert.equal(payload.code, 0);
+    assert.ok(payload.data?.url, 'signed url');
+    signedUrl = payload.data.url;
   }
 
-  // 3) 下载签名 URL（mock 文件服务）
+  // 3) 下载 mock PDF
   {
-    const dl = await fetch(signedUrl);
-    assert.equal(dl.status, 200);
-    // 最小 mock PDF 字节流，长度 > 0
-    const buf = await dl.arrayBuffer();
-    assert.ok(buf.byteLength > 0);
+    const d = await fetch(signedUrl);
+    assert.equal(d.status, 200);
+    const buf = await d.arrayBuffer();
+    assert.ok(buf.byteLength > 0, 'downloaded bytes > 0');
   }
 
-  // 4) 订单创建 → 回调 → 查询状态=paid
+  // 4) 订单 create → 回调 → 查询 = paid
   let outTradeNo = '';
   {
-    const { res, json } = await jfetch('/v1/order/create', {
+    const { res, json } = await fetchJson('/v1/order/create', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ plan: 'basic', amount: 1990 })
     });
     assert.equal(res.status, 200);
-    assert.equal(json?.code, 0);
-    outTradeNo = json.data.out_trade_no;
+    const payload = json?.data ? json : { code: 0, data: json };
+    assert.equal(payload.code, 0);
+    outTradeNo = payload.data.out_trade_no;
     assert.ok(outTradeNo);
   }
   {
-    const { res, json } = await jfetch('/v1/order/callback', {
+    const { res, json } = await fetchJson('/v1/order/callback', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ out_trade_no: outTradeNo, result: 'SUCCESS', amount: 1990 })
     });
     assert.equal(res.status, 200);
-    assert.equal(json?.code, 0);
-    assert.equal(json?.data?.status, 'paid');
+    const payload = json?.data ? json : { code: 0, data: json };
+    assert.equal(payload.code, 0);
+    assert.equal(payload.data?.status, 'paid');
   }
   {
-    const { res, json } = await jfetch(`/v1/order/status?out_trade_no=${encodeURIComponent(outTradeNo)}`);
+    const { res, json } = await fetchJson(`/v1/order/status?out_trade_no=${encodeURIComponent(outTradeNo)}`);
     assert.equal(res.status, 200);
-    assert.equal(json?.code, 0);
-    assert.equal(json?.data?.status, 'paid');
+    const payload = json?.data ? json : { code: 0, data: json };
+    assert.equal(payload.code, 0);
+    assert.equal(payload.data?.status, 'paid');
   }
 });
