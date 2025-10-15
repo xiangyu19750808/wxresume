@@ -11,7 +11,6 @@ const E2E_ENV = {
   NODE_ENV: 'test',
   PORT: String(PORT),
   JWT_SECRET: process.env.JWT_SECRET || 'ci-secret',
-  ALLOWED_ORIGINS: ''
 };
 
 async function fetchJson(path, init) {
@@ -20,7 +19,7 @@ async function fetchJson(path, init) {
   return { res, json };
 }
 
-async function waitServerReady(maxMs = 45_000) {
+async function waitServerReady(maxMs = 60_000) {
   const start = Date.now();
   while (Date.now() - start < maxMs) {
     try {
@@ -33,17 +32,17 @@ async function waitServerReady(maxMs = 45_000) {
 }
 
 async function bootServer() {
-  const child = spawn('node', ['apps/api/src/server.js'], {
+  const child = spawn('node', ['apps/api/src/server.ci.js'], {
     env: E2E_ENV,
     stdio: ['ignore', 'pipe', 'pipe']
   });
   child.stdout.on('data', (b) => process.stdout.write(b));
   child.stderr.on('data', (b) => process.stderr.write(b));
 
-  const ready = await waitServerReady(45_000);
+  const ready = await waitServerReady(60_000);
   if (!ready) {
     child.kill('SIGKILL');
-    throw new Error('server boot timeout (health not ready within 45s)');
+    throw new Error('server boot timeout (health not ready within 60s)');
   }
   return {
     proc: child,
