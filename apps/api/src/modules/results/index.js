@@ -27,7 +27,7 @@ function pickParams(req) {
     body.reportId ??
     q.report_id ??
     q.reportId ??
-    null;                        // <== 别忘了给个兜底
+    null; // 兜底
 
   const score = safeNumber(body.score ?? q.score, 0);
   const meta = (body.meta && typeof body.meta === 'object') ? body.meta : {};

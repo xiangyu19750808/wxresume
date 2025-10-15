@@ -97,14 +97,14 @@ app.get('/mock/:file', (req, res) => {
 // -------------------------------
 // 健康检查
 // -------------------------------
-app.get('/v1/health', (req, res) => {
+app.get('/v1/health', (_req, res) => {
   res.json({ code: 0, msg: 'ok' });
 });
 
 // -------------------------------
 // 模板清单
 // -------------------------------
-app.get('/v1/templates', (req, res) => {
+app.get('/v1/templates', (_req, res) => {
   try {
     const templates = listTemplates();
     res.json({ code: 0, data: templates });
@@ -116,7 +116,7 @@ app.get('/v1/templates', (req, res) => {
 // -------------------------------
 // 渲染（mock）：读取样例 JSON -> PDF buffer -> 返回字节数
 // -------------------------------
-app.post('/v1/render/mock', async (req, res) => {
+app.post('/v1/render/mock', async (_req, res) => {
   try {
     const repoRoot = path.resolve(process.cwd(), '../../');
     const samplePath = path.join(repoRoot, 'samples/resume/alice.json');
@@ -178,7 +178,7 @@ app.post('/v1/match/score', (req, res) => {
     }
     const resumeSkills = new Set((resume.skills || []).map((s) => s.name));
 
-    // 2) JD 关键词：优先 body.keywords；否则从 body.jd_text 基于词典提取
+    // 2) JD 关键词
     let jdKeywords = Array.isArray(body.keywords) ? body.keywords : [];
     if ((!jdKeywords || jdKeywords.length === 0) && body.jd_text) {
       const text = String(body.jd_text);
@@ -242,12 +242,10 @@ app.post('/v1/analysis/report', (req, res) => {
 // 订单（占位）：create/status/callback
 // -------------------------------
 const MEM_ORDERS = new Map(); // key: out_trade_no -> {status, amount, plan}
-
 function genOutTradeNo() {
   const t = Date.now().toString();
   return 'ORD' + t.slice(-8) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
 }
-
 app.post('/v1/order/create', (req, res) => {
   try {
     const { plan = 'basic', amount = 1990 } = req.body || {};
@@ -259,7 +257,6 @@ app.post('/v1/order/create', (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
   }
 });
-
 app.get('/v1/order/status', (req, res) => {
   try {
     const out_trade_no = String(req.query.out_trade_no || '');
@@ -271,7 +268,6 @@ app.get('/v1/order/status', (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
   }
 });
-
 app.post('/v1/order/callback', (req, res) => {
   try {
     const { out_trade_no, result = 'SUCCESS', amount } = req.body || {};
@@ -333,7 +329,7 @@ app.post('/v1/render/resume', async (req, res) => {
 // -------------------------------
 // OpenAPI JSON（若存在 src/openapi.json）
 // -------------------------------
-app.get('/v1/openapi.json', (req, res) => {
+app.get('/v1/openapi.json', (_req, res) => {
   try {
     const p = path.resolve(process.cwd(), 'src/openapi.json');
     const json = fs.readFileSync(p, 'utf-8');
@@ -370,8 +366,7 @@ app.post('/v1/results/save', async (req, res) => {
 // -------------------------------
 app.get('/v1/results/db', async (req, res) => {
   try {
-    const user_id = String(req.query.user_id || '');
-    if (!user_id) return res.status(400).json({ code: 400, msg: 'missing user_id' });
+    const user_id = String(req.query.user_id || 'demo'); // 默认 demo
     const rows = await prisma.result.findMany({
       where: { user_id },
       orderBy: { created_at: 'desc' },

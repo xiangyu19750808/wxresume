@@ -9,6 +9,9 @@ if (!JWT_SECRET) {
 }
 
 const unauthorizedResponse = (res) => {
+  if (typeof res.fail === "function") {
+    return res.fail(401, "unauthorized");
+  }
   return res.status(401).json({ code: 401, msg: "unauthorized" });
 };
 
