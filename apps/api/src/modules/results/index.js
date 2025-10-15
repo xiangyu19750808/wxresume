@@ -2,6 +2,9 @@ import { Router } from 'express';
 
 const mem = { results: [] };
 
+const sendOk = (res, data) =>
+  res.ok ? res.ok(data) : res.status(200).json({ code: 0, data });
+
 function buildItem({ report_id, score = 0, meta = {} }) {
   return {
     id: `res-${Date.now()}`,
@@ -34,12 +37,12 @@ export function createResultsRouter() {
     const params = pickParams(req);
     const item = buildItem(params);
     mem.results.unshift(item);
-    return res.json({ code: 0, data: item });
+    return sendOk(res, item);
   });
 
   // 兼容脚本：GET /v1/results/db
   router.get('/v1/results/db', (_req, res) => {
-    return res.json({ code: 0, data: mem.results });
+    return sendOk(res, mem.results);
   });
 
   // 标准：POST /v1/results
@@ -47,12 +50,12 @@ export function createResultsRouter() {
     const params = pickParams(req);
     const item = buildItem(params);
     mem.results.unshift(item);
-    return res.json({ code: 0, data: item });
+    return sendOk(res, item);
   });
 
   // 列表：GET /v1/results
   router.get('/v1/results', (_req, res) => {
-    return res.json({ code: 0, data: mem.results });
+    return sendOk(res, mem.results);
   });
 
   return router;
