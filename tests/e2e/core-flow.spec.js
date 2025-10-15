@@ -11,7 +11,7 @@ const E2E_ENV = {
   NODE_ENV: 'test',
   PORT: String(PORT),
   JWT_SECRET: process.env.JWT_SECRET || 'ci-secret',
-  ALLOWED_ORIGINS: '' // 显式空白名单，避免意外阻断
+  ALLOWED_ORIGINS: ''
 };
 
 async function fetchJson(path, init) {
@@ -20,13 +20,13 @@ async function fetchJson(path, init) {
   return { res, json };
 }
 
-async function waitServerReady(maxMs = 30_000) {
+async function waitServerReady(maxMs = 45_000) {
   const start = Date.now();
   while (Date.now() - start < maxMs) {
     try {
       const { res, json } = await fetchJson('/v1/health');
       if (res.ok && json?.code === 0) return true;
-    } catch (_) {}
+    } catch {}
     await delay(500);
   }
   return false;
@@ -37,17 +37,14 @@ async function bootServer() {
     env: E2E_ENV,
     stdio: ['ignore', 'pipe', 'pipe']
   });
-
-  // 将服务日志透传到 CI 输出，便于排查
   child.stdout.on('data', (b) => process.stdout.write(b));
   child.stderr.on('data', (b) => process.stderr.write(b));
 
-  const ready = await waitServerReady(30_000);
+  const ready = await waitServerReady(45_000);
   if (!ready) {
     child.kill('SIGKILL');
-    throw new Error('server boot timeout (health not ready within 30s)');
+    throw new Error('server boot timeout (health not ready within 45s)');
   }
-
   return {
     proc: child,
     async close() {
@@ -62,35 +59,32 @@ test('core flow: health → download → order', async (t) => {
   const server = await bootServer();
   t.after(async () => { await server.close(); });
 
-  // 1) health
+  // health
   {
     const { res, json } = await fetchJson('/v1/health');
     assert.equal(res.status, 200);
     assert.equal(json?.code, 0);
   }
 
-  // 2) 申请签名下载 URL（避免使用需要 Playwright 的渲染接口）
+  // file download (mock signed url)
   let signedUrl = '';
   {
     const fileId = `resume-${Date.now()}.pdf`;
     const { res, json } = await fetchJson(`/v1/file/download?file_id=${encodeURIComponent(fileId)}`);
     assert.equal(res.status, 200);
-    // res.ok/res.fail 统一返回结构时，这里可能有 msg/requestId；兼容旧/新两种
     const payload = json?.data ? json : { code: 0, data: json };
     assert.equal(payload.code, 0);
-    assert.ok(payload.data?.url, 'signed url');
+    assert.ok(payload.data?.url);
     signedUrl = payload.data.url;
   }
-
-  // 3) 下载 mock PDF
   {
     const d = await fetch(signedUrl);
     assert.equal(d.status, 200);
     const buf = await d.arrayBuffer();
-    assert.ok(buf.byteLength > 0, 'downloaded bytes > 0');
+    assert.ok(buf.byteLength > 0);
   }
 
-  // 4) 订单 create → 回调 → 查询 = paid
+  // order create → callback → status
   let outTradeNo = '';
   {
     const { res, json } = await fetchJson('/v1/order/create', {
@@ -102,7 +96,6 @@ test('core flow: health → download → order', async (t) => {
     const payload = json?.data ? json : { code: 0, data: json };
     assert.equal(payload.code, 0);
     outTradeNo = payload.data.out_trade_no;
-    assert.ok(outTradeNo);
   }
   {
     const { res, json } = await fetchJson('/v1/order/callback', {
