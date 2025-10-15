@@ -8,17 +8,14 @@ import path from 'node:path';
 import { createUsersRouter } from './modules/users/index.js';
 import { createFileRouter } from './modules/file/index.js';
 import { createResultsRouter } from './modules/results/index.js';
-
 import { reqid } from './middlewares/reqid.js';
 import jwtMiddleware from './middlewares/jwt.js';
 
-// 可选：模板/渲染工具与 COS 适配占位
+// 可选：模板/渲染工具（保持轻量；Playwright 改为惰性导入）
 import { listTemplates } from '../../../packages/templates/index.js';
 import { resumeToHTML } from './render.template.js';
-import { htmlToPDFBuffer } from './render.playwright.js';
-import { getSignedUrl } from '../../../packages/adapters/cos/index.js';
 
-// Prisma（/v1/db/ping、/v1/results/save、/v1/results/db 使用）
+// Prisma（/v1/db/ping、/v1/results/save 会使用）
 import { prisma } from './db.js';
 
 // -------------------------------
@@ -38,7 +35,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .filter(Boolean);
 
 // -------------------------------
-// 初始化应用 & 中间件顺序（很重要）
+// 初始化应用 & 中间件顺序
 // -------------------------------
 const app = express();
 
@@ -57,16 +54,16 @@ app.use((req, res, next) => {
     return res.status(403).json({ code: 403, msg: 'forbidden' });
   }
 
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Vary', 'Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
 
   const requestHeaders = req.headers['access-control-request-headers'];
-  res.setHeader(
+  res.header(
     'Access-Control-Allow-Headers',
     requestHeaders ? String(requestHeaders) : 'Authorization,Content-Type'
   );
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
 
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
@@ -80,7 +77,9 @@ app.use(createResultsRouter());
 app.use(createUsersRouter());
 
 // -------------------------------
-// Mock 文件直出（与 /v1/file/download 的 URL 配合）
+// 保留 main 分支的 Mock 文件服务
+// /mock/:file  -> 若存在仓库根/resumes_pdf/<file> 则返回该文件
+//               否则回一个最小 PDF 占位内容
 // -------------------------------
 app.get('/mock/:file', (req, res) => {
   const filename = req.params.file;
@@ -89,21 +88,20 @@ app.get('/mock/:file', (req, res) => {
     return res.sendFile(filePath);
   }
   res.setHeader('Content-Type', 'application/pdf');
-  // 一个最小可识别的 PDF 占位
   res.send(Buffer.from('%PDF-1.4\n% mock\n'));
 });
 
 // -------------------------------
 // 健康检查
 // -------------------------------
-app.get('/v1/health', (_req, res) => {
+app.get('/v1/health', (req, res) => {
   res.json({ code: 0, msg: 'ok' });
 });
 
 // -------------------------------
 // 模板清单
 // -------------------------------
-app.get('/v1/templates', (_req, res) => {
+app.get('/v1/templates', (req, res) => {
   try {
     const templates = listTemplates();
     res.json({ code: 0, data: templates });
@@ -113,15 +111,19 @@ app.get('/v1/templates', (_req, res) => {
 });
 
 // -------------------------------
-// 渲染（mock）：读取样例 JSON -> HTML -> PDF buffer -> 返回字节数
+// 渲染（mock）：读取样例 JSON -> PDF buffer -> 返回字节数
+// **Playwright 改为惰性导入**，只有命中该路由才会加载
 // -------------------------------
-app.post('/v1/render/mock', async (_req, res) => {
+app.post('/v1/render/mock', async (req, res) => {
   try {
     const repoRoot = path.resolve(process.cwd(), '../../');
     const samplePath = path.join(repoRoot, 'samples/resume/alice.json');
     const resume = JSON.parse(fs.readFileSync(samplePath, 'utf-8'));
     const html = resumeToHTML(resume, 'classic');
+
+    const { htmlToPDFBuffer } = await import('./render.playwright.js');
     const buf = await htmlToPDFBuffer(html);
+
     res.json({ code: 0, data: { bytes: buf.length } });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
@@ -169,7 +171,6 @@ app.post('/v1/match/score', (req, res) => {
     const dict = JSON.parse(fs.readFileSync(dictPath, 'utf-8'));
 
     const body = req.body || {};
-    // 1) 简历数据：若未传则读取样例
     let resume = body.resume;
     if (!resume) {
       const samplePath = path.join(repoRoot, 'samples/resume/alice.json');
@@ -177,7 +178,6 @@ app.post('/v1/match/score', (req, res) => {
     }
     const resumeSkills = new Set((resume.skills || []).map((s) => s.name));
 
-    // 2) JD 关键词：优先 body.keywords；否则从 body.jd_text 基于词典提取
     let jdKeywords = Array.isArray(body.keywords) ? body.keywords : [];
     if ((!jdKeywords || jdKeywords.length === 0) && body.jd_text) {
       const text = String(body.jd_text);
@@ -186,16 +186,13 @@ app.post('/v1/match/score', (req, res) => {
     }
     const jdSet = new Set(jdKeywords);
 
-    // 3) Jaccard
     const inter = new Set([...jdSet].filter((x) => resumeSkills.has(x)));
     const union = new Set([...jdSet, ...resumeSkills]);
     const jaccard = union.size ? inter.size / union.size : 0;
 
-    // 4) 命中/缺口
     const hits = [...inter];
     const gaps = [...jdSet].filter((k) => !resumeSkills.has(k)).slice(0, 3);
 
-    // 5) 简单得分
     const mustSet = new Set((dict.skills || []).filter((k) => jdSet.has(k)));
     const mustMiss = [...mustSet].filter((k) => !resumeSkills.has(k)).length;
     let score = Math.round(jaccard * 100 - mustMiss * 10);
@@ -240,7 +237,7 @@ app.post('/v1/analysis/report', (req, res) => {
 // -------------------------------
 // 订单（占位）：create/status/callback
 // -------------------------------
-const MEM_ORDERS = new Map(); // key: out_trade_no -> {status, amount, plan}
+const MEM_ORDERS = new Map();
 
 function genOutTradeNo() {
   const t = Date.now().toString();
@@ -295,11 +292,12 @@ app.post('/v1/order/callback', (req, res) => {
 });
 
 // -------------------------------
-// PDF 渲染（Playwright 真渲染）
+// PDF 渲染（Playwright 真渲染）— 惰性导入
 // -------------------------------
 app.post('/v1/render/pdf', async (req, res) => {
   try {
     const html = String(req.body?.html || '<h1>Test PDF</h1>');
+    const { htmlToPDFBuffer } = await import('./render.playwright.js');
     const buf = await htmlToPDFBuffer(html);
     res.json({ code: 0, data: { bytes: buf.length } });
   } catch (e) {
@@ -308,7 +306,7 @@ app.post('/v1/render/pdf', async (req, res) => {
 });
 
 // -------------------------------
-// 用模板把简历渲染为 PDF（真 PDF + 假 URL）
+// 用模板把简历渲染为 PDF（真 PDF + 假 URL）— 惰性导入 COS 适配
 // -------------------------------
 app.post('/v1/render/resume', async (req, res) => {
   try {
@@ -319,10 +317,13 @@ app.post('/v1/render/resume', async (req, res) => {
     const resume = body.resume || JSON.parse(fs.readFileSync(samplePath, 'utf-8'));
 
     const html = resumeToHTML(resume, templateId);
+    const { htmlToPDFBuffer } = await import('./render.playwright.js');
     const buf = await htmlToPDFBuffer(html);
 
     const fid = 'resume-' + Date.now() + '.pdf';
-    const url = await getSignedUrl(fid); // 来自 adapters/cos 的假签名 URL
+    const { getSignedUrl } = await import('../../../packages/adapters/cos/index.js');
+    const url = await getSignedUrl(fid);
+
     res.json({ code: 0, data: { file_id: fid, bytes: buf.length, url } });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || 'render error' });
@@ -332,7 +333,7 @@ app.post('/v1/render/resume', async (req, res) => {
 // -------------------------------
 // OpenAPI JSON（若存在 src/openapi.json）
 // -------------------------------
-app.get('/v1/openapi.json', (_req, res) => {
+app.get('/v1/openapi.json', (req, res) => {
   try {
     const p = path.resolve(process.cwd(), 'src/openapi.json');
     const json = fs.readFileSync(p, 'utf-8');
@@ -369,7 +370,7 @@ app.post('/v1/results/save', async (req, res) => {
 // -------------------------------
 app.get('/v1/results/db', async (req, res) => {
   try {
-    const user_id = String(req.query.user_id || 'demo'); // 默认 demo
+    const user_id = String(req.query.user_id || 'demo');
     const rows = await prisma.result.findMany({
       where: { user_id },
       orderBy: { created_at: 'desc' },
