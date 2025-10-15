@@ -42,11 +42,11 @@ jobs:
           PORT: '9080'
         run: |
           nohup node apps/api/src/server.js > server.log 2>&1 &
-          for i in $(seq 1 60); do
+          for i in $(seq 1 90); do
             if curl -fsS "http://127.0.0.1:9080/v1/health" >/dev/null; then
               echo "server is ready"; break
             fi
-            echo "waiting server ($i/60) ..."
+            echo "waiting server ($i/90) ..."
             sleep 1
           done
           curl -fsS "http://127.0.0.1:9080/v1/health"
