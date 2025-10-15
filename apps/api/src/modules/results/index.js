@@ -1,9 +1,12 @@
+// apps/api/src/modules/results/index.js
 import { Router } from 'express';
 
 const mem = { results: [] };
 
-const sendOk = (res, data) =>
-  res.ok ? res.ok(data) : res.status(200).json({ code: 0, data });
+function safeNumber(n, def = 0) {
+  const v = Number(n);
+  return Number.isFinite(v) ? v : def;
+}
 
 function buildItem({ report_id, score = 0, meta = {} }) {
   return {
@@ -18,44 +21,55 @@ function buildItem({ report_id, score = 0, meta = {} }) {
 function pickParams(req) {
   const body = req.body || {};
   const q = req.query || {};
+
   const report_id =
     body.report_id ??
     body.reportId ??
     q.report_id ??
     q.reportId ??
-    `r-${Date.now()}`; // 缺失时自动生成，保证 smoke 通过
-  const score = body.score ?? Number.isFinite(Number(q.score)) ? Number(q.score) : 0;
-  const meta = body.meta ?? {};
+    null;
+
+  const score = safeNumber(body.score ?? q.score, 0);
+  const meta = (body.meta && typeof body.meta === 'object') ? body.meta : {};
+
   return { report_id, score, meta };
+}
+
+function ok(res, data) {
+  if (typeof res.ok === 'function') return res.ok(data);
+  return res.json({ code: 0, msg: 'ok', data });
+}
+
+function fail(res, status, msg) {
+  if (typeof res.fail === 'function') return res.fail(status, msg);
+  return res.status(status).json({ code: status, msg, data: null });
 }
 
 export function createResultsRouter() {
   const router = Router();
 
-  // 兼容脚本：POST /v1/results/save
   router.post('/v1/results/save', (req, res) => {
-    const params = pickParams(req);
-    const item = buildItem(params);
+    const { report_id, score, meta } = pickParams(req);
+    if (!report_id) return fail(res, 400, 'report_id required');
+    const item = buildItem({ report_id, score, meta });
     mem.results.unshift(item);
-    return sendOk(res, item);
+    return ok(res, item);
   });
 
-  // 兼容脚本：GET /v1/results/db
   router.get('/v1/results/db', (_req, res) => {
-    return sendOk(res, mem.results);
+    return ok(res, mem.results);
   });
 
-  // 标准：POST /v1/results
   router.post('/v1/results', (req, res) => {
-    const params = pickParams(req);
-    const item = buildItem(params);
+    const { report_id, score, meta } = pickParams(req);
+    if (!report_id) return fail(res, 400, 'report_id required');
+    const item = buildItem({ report_id, score, meta });
     mem.results.unshift(item);
-    return sendOk(res, item);
+    return ok(res, item);
   });
 
-  // 列表：GET /v1/results
   router.get('/v1/results', (_req, res) => {
-    return sendOk(res, mem.results);
+    return ok(res, mem.results);
   });
 
   return router;

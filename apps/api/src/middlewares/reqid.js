@@ -1,3 +1,4 @@
+// apps/api/src/middlewares/reqid.js
 import { randomUUID } from 'node:crypto';
 
 const RESERVED_RESPONSE_KEYS = new Set(['code', 'msg', 'data', 'requestId']);
@@ -17,84 +18,52 @@ function normalizePayload(payload, requestId) {
     if (!('msg' in normalized)) {
       normalized.msg = normalized.code === 0 ? 'ok' : 'error';
     }
+  }
 
-    if (!('data' in normalized)) {
-      const rest = {};
-
-      for (const key of Object.keys(normalized)) {
-        if (!RESERVED_RESPONSE_KEYS.has(key)) {
-          rest[key] = normalized[key];
-          delete normalized[key];
-        }
+  if (!('data' in normalized)) {
+    const rest = {};
+    for (const key of Object.keys(normalized)) {
+      if (!RESERVED_RESPONSE_KEYS.has(key)) {
+        rest[key] = normalized[key];
+        delete normalized[key];
       }
-
-      normalized.data = Object.keys(rest).length ? rest : null;
     }
+    normalized.data = Object.keys(rest).length ? rest : null;
   }
 
   return normalized;
 }
 
-function attachResponseHelpers(req, res) {
-  const requestId = req.requestId;
+export function reqid() {
+  return (req, res, next) => {
+    const requestId = randomUUID();
+    req.requestId = requestId;
 
-  const setHeader = (key, value) => {
-    if (typeof res.set === 'function') {
-      res.set(key, value);
-    } else if (typeof res.setHeader === 'function') {
-      res.setHeader(key, value);
-    }
-  };
+    res.setHeader('X-Request-ID', requestId);
 
-  setHeader('X-Request-ID', requestId);
-
-  const originalJson = typeof res.json === 'function' ? res.json.bind(res) : null;
-
-  if (originalJson) {
-    res.json = function patchedJson(body) {
-      return originalJson(normalizePayload(body, requestId));
-    };
-  }
-
-  res.ok = function ok(data = null, msg = 'ok', code = 0) {
-    const payload = {
-      code,
-      msg,
-      data,
-      requestId,
-    };
-    return this.status(200).json(payload);
-  };
-
-  res.fail = function fail(code = 500, msg = 'Internal Server Error', data = null, status) {
-    const httpStatus = typeof status === 'number'
-      ? status
-      : code >= 100 && code < 600
-      ? code
-      : 500;
-
-    const payload = {
-      code,
-      msg,
-      data,
-      requestId,
+    res.ok = (data = null) => {
+      const body = normalizePayload({ code: 0, data, requestId }, requestId);
+      return res.status(200).json(body);
     };
 
-    return this.status(httpStatus).json(payload);
+    res.fail = (status = 500, msg = 'error', extra = null) => {
+      const body = normalizePayload({ code: status, msg, data: extra, requestId }, requestId);
+      if (status >= 500) {
+        const errorLog = {
+          level: 'error',
+          timestamp: new Date().toISOString(),
+          requestId,
+          message: msg,
+        };
+        try {
+          console.error(JSON.stringify(errorLog));
+        } catch {
+          console.error(errorLog);
+        }
+      }
+      return res.status(status).json(body);
+    };
+
+    next();
   };
 }
-
-export default function requestIdMiddleware(req, res, next) {
-  const incoming = req.get?.('x-request-id') || req.headers?.['x-request-id'];
-  const requestId = typeof incoming === 'string' && incoming.trim() !== ''
-    ? incoming
-    : randomUUID();
-
-  req.requestId = requestId;
-
-  attachResponseHelpers(req, res);
-
-  next();
-}
-
-export { attachResponseHelpers, normalizePayload };
