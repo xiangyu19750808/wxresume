@@ -72,7 +72,25 @@ app.use((req, res, next) => {
 });
 
 // -------------------------------
-// 路由挂载（顺序保持一致）
+// 先声明需要优先匹配的路由（防止被 /v1/results/:rid 抢占）
+// -------------------------------
+
+// 从 DB 拉取结果列表（按 user_id）
+app.get('/v1/results/db', async (req, res) => {
+  try {
+    const user_id = String(req.query.user_id || 'demo'); // 默认 demo
+    const rows = await prisma.result.findMany({
+      where: { user_id },
+      orderBy: { created_at: 'desc' },
+    });
+    res.json({ code: 0, data: rows });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || 'db error' });
+  }
+});
+
+// -------------------------------
+// 路由挂载（保持顺序）
 // -------------------------------
 app.use(createFileRouter());
 app.use(createResultsRouter());
@@ -360,23 +378,6 @@ app.post('/v1/results/save', async (req, res) => {
       data: { user_id, match, report, file_id, bytes },
     });
     res.json({ code: 0, data: { id: row.id, report_id: row.report_id || ('r-' + Date.now()) } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'db error' });
-  }
-});
-
-// -------------------------------
-// 从 DB 拉取结果列表（按 user_id）
-// -------------------------------
-app.get('/v1/results/db', async (req, res) => {
-  try {
-    const user_id = String(req.query.user_id || '');
-    if (!user_id) return res.status(400).json({ code: 400, msg: 'missing user_id' });
-    const rows = await prisma.result.findMany({
-      where: { user_id },
-      orderBy: { created_at: 'desc' },
-    });
-    res.json({ code: 0, data: rows });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || 'db error' });
   }
