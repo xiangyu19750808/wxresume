@@ -1,141 +1,141 @@
 // tests/e2e/core-flow.spec.js
-import { test } from 'node:test';
+// Node 20 内置 test runner + fetch；不依赖第三方库
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
-import { fetch } from 'node-fetch-native'; // Node 20 内置 fetch 也可，用这个兼容性更好
 
-// ---- 配置 ----
-const PORT = 9080;
+const PORT = Number(process.env.PORT || 9080);
 const BASE = `http://127.0.0.1:${PORT}`;
+const E2E_ENV = {
+  ...process.env,
+  NODE_ENV: 'test',
+  PORT: String(PORT),
+  JWT_SECRET: process.env.JWT_SECRET || 'ci-secret',
+  // 允许本地请求；你的服务默认不开 CORS 阻断非浏览器，这里只是显式给个空白名单
+  ALLOWED_ORIGINS: ''
+};
 
-// 在 CI / 本地都使用 node 直接跑 server.js（非 watch），更稳定
-function startApi() {
-  // 通过 node 直接运行 apps/api/src/server.js
-  const child = spawn(
-    process.execPath,
-    ['apps/api/src/server.js'],
-    {
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-        PORT: String(PORT),
-        JWT_SECRET: process.env.JWT_SECRET || 'ci-secret',
-        // 允许来自本地 origin 的 CORS（测试里不太用到，但留着）
-        ALLOWED_ORIGINS: 'http://localhost:5173,http://127.0.0.1:5173',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }
-  );
+// 启动 API 并等待“API listening on ...”日志
+async function bootServer() {
+  const child = spawn('node', ['apps/api/src/server.js'], {
+    env: E2E_ENV,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
 
   let ready = false;
-  child.stdout.setEncoding('utf8');
-  child.stderr.setEncoding('utf8');
+  const waitReady = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('server boot timeout'));
+    }, 15_000);
 
-  child.stdout.on('data', (chunk) => {
-    if (/API listening on/i.test(chunk)) {
-      ready = true;
-    }
+    const onLine = (buf) => {
+      const line = buf.toString();
+      if (line.includes('API listening on')) {
+        ready = true;
+        clearTimeout(timer);
+        child.stdout.off('data', onLine);
+        resolve();
+      }
+    };
+    child.on('error', reject);
+    child.stdout.on('data', onLine);
   });
 
-  // 超时兜底（CI 慢给 25s）
-  const waitReady = (async () => {
-    for (let i = 0; i < 50; i += 1) {
-      if (ready) return;
+  try {
+    await waitReady;
+  } catch (e) {
+    // 打印下日志便于 CI 排查
+    child.stdout?.pipe(process.stdout);
+    child.stderr?.pipe(process.stderr);
+    child.kill('SIGKILL');
+    throw e;
+  }
+
+  return {
+    proc: child,
+    async close() {
+      // 尽量优雅退出，否则强杀
+      child.kill('SIGTERM');
       await delay(500);
+      if (!child.killed) child.kill('SIGKILL');
     }
-    throw new Error('API did not start within time limit');
-  })();
-
-  return { child, waitReady };
+  };
 }
 
-async function kill(child) {
-  if (!child || child.killed) return;
-  child.kill('SIGTERM');
-  // 最多等 5s 平滑退出
-  const done = Promise.race([
-    once(child, 'exit'),
-    delay(5000),
-  ]);
-  await done.catch(() => {});
+async function jfetch(path, init) {
+  const res = await fetch(`${BASE}${path}`, init);
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    return { res, json: await res.json() };
+  }
+  return { res, json: null };
 }
 
-test('e2e: health -> render -> download -> order', async (t) => {
-  // 1) 启动 API
-  const { child, waitReady } = startApi();
-  await waitReady;
-
+test('core flow: health → render → download → order', async (t) => {
+  const server = await bootServer();
   t.after(async () => {
-    await kill(child);
+    await server.close();
   });
 
-  // 2) health
+  // 1) health
   {
-    const res = await fetch(`${BASE}/v1/health`);
-    assert.equal(res.ok, true);
-    const json = await res.json();
-    assert.equal(json.code, 0);
+    const { res, json } = await jfetch('/v1/health');
+    assert.equal(res.status, 200);
+    assert.equal(json?.code, 0);
   }
 
-  // 3) render.resume（返回假签名下载链接）
-  let fileUrl;
+  // 2) render resume （返回假签名 URL）
+  let signedUrl = '';
   {
-    const res = await fetch(`${BASE}/v1/render/resume`, {
+    const { res, json } = await jfetch('/v1/render/resume', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ templateId: 'classic' })
     });
-    assert.equal(res.ok, true);
-    const json = await res.json();
-    assert.equal(json.code, 0);
-    assert.ok(json.data?.url);
-    fileUrl = json.data.url;
+    assert.equal(res.status, 200);
+    assert.equal(json?.code, 0);
+    assert.ok(json?.data?.url, 'signed url');
+    assert.ok(Number(json?.data?.bytes) > 0);
+    signedUrl = json.data.url;
   }
 
-  // 4) file.download（通过签名接口）
+  // 3) 下载签名 URL（mock 文件服务）
   {
-    const u = new URL(`${BASE}/v1/file/download`);
-    const fileId = fileUrl.split('/').pop().split('?')[0]; // 简单取个文件名
-    u.searchParams.set('file_id', fileId);
-    const res = await fetch(u);
-    assert.equal(res.ok, true);
-    const json = await res.json();
-    assert.equal(json.code, 0);
-    assert.ok(/^http:\/\/localhost:8080\/mock\//.test(json.data.url));
+    const dl = await fetch(signedUrl);
+    assert.equal(dl.status, 200);
+    // 最小 mock PDF 字节流，长度 > 0
+    const buf = await dl.arrayBuffer();
+    assert.ok(buf.byteLength > 0);
   }
 
-  // 5) order.create -> callback -> status
-  let outTradeNo;
+  // 4) 订单创建 → 回调 → 查询状态=paid
+  let outTradeNo = '';
   {
-    const res = await fetch(`${BASE}/v1/order/create`, {
+    const { res, json } = await jfetch('/v1/order/create', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ plan: 'basic', amount: 1990 }),
+      body: JSON.stringify({ plan: 'basic', amount: 1990 })
     });
-    const json = await res.json();
-    assert.equal(json.code, 0);
+    assert.equal(res.status, 200);
+    assert.equal(json?.code, 0);
     outTradeNo = json.data.out_trade_no;
     assert.ok(outTradeNo);
   }
   {
-    // 模拟支付回调
-    const res = await fetch(`${BASE}/v1/order/callback`, {
+    const { res, json } = await jfetch('/v1/order/callback', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ out_trade_no: outTradeNo, result: 'SUCCESS', amount: 1990 }),
+      body: JSON.stringify({ out_trade_no: outTradeNo, result: 'SUCCESS', amount: 1990 })
     });
-    const json = await res.json();
-    assert.equal(json.code, 0);
-    assert.equal(json.data.status, 'paid');
+    assert.equal(res.status, 200);
+    assert.equal(json?.code, 0);
+    assert.equal(json?.data?.status, 'paid');
   }
   {
-    const u = new URL(`${BASE}/v1/order/status`);
-    u.searchParams.set('out_trade_no', outTradeNo);
-    const res = await fetch(u);
-    const json = await res.json();
-    assert.equal(json.code, 0);
-    assert.equal(json.data.status, 'paid');
+    const { res, json } = await jfetch(`/v1/order/status?out_trade_no=${encodeURIComponent(outTradeNo)}`);
+    assert.equal(res.status, 200);
+    assert.equal(json?.code, 0);
+    assert.equal(json?.data?.status, 'paid');
   }
 });
