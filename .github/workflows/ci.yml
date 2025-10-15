@@ -26,32 +26,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 安装 pnpm（固定 8.15.7）并启用缓存
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8.15.7
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+      - name: Install dependencies (pnpm via npx)
+        run: |
+          npx -y pnpm@8.15.7 -v
+          npx -y pnpm@8.15.7 install --no-frozen-lockfile
 
-      # 端到端测试：给定必要的环境变量，使用固定端口 9080
-      - name: End-to-end tests
+      - name: Boot API (light mode)
         env:
-          NODE_ENV: test
-          JWT_SECRET: ci-secret
-          PORT: 9080
-        run: pnpm -w run test:e2e
+          E2E_LIGHT: '1'
+          PORT: '9080'
+        run: |
+          nohup node apps/api/src/server.js > server.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:9080/v1/health" >/dev/null; then
+              echo "server is ready"; break
+            fi
+            echo "waiting server ($i/60) ..."
+            sleep 1
+          done
+          curl -fsS "http://127.0.0.1:9080/v1/health"
 
-      # 如需恢复构建/单测可解除注释
-      # - name: Build
-      #   run: pnpm -w -r build
-      #
-      # - name: Test
-      #   run: pnpm -w -r test
+      - name: End-to-end tests
+        run: npx -y pnpm@8.15.7 run test:e2e
+
+      - name: Print server log
+        if: always()
+        run: |
+          echo "------------ server.log -------------"
+          tail -n +1 server.log || true
+          echo "-------------------------------------"
