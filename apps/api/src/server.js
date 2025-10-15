@@ -4,28 +4,12 @@ import express from 'express';
 import helmet from 'helmet';
 import fs from 'node:fs';
 import path from 'node:path';
-
-import { createUsersRouter } from './modules/users/index.js';
-import { createFileRouter } from './modules/file/index.js';
-import { createResultsRouter } from './modules/results/index.js';
 import { reqid } from './middlewares/reqid.js';
-import jwtMiddleware from './middlewares/jwt.js';
 
-// 可选：模板/渲染工具与 COS 适配（仅完整版使用）
-import { listTemplates } from '../../../packages/templates/index.js';
-import { resumeToHTML } from './render.template.js';
-import { htmlToPDFBuffer } from './render.playwright.js';
-import { getSignedUrl } from '../../../packages/adapters/cos/index.js';
-
-// Prisma（完整版才会用）
-import { prisma } from './db.js';
-
-// ========= 关键：轻量开关 =========
+// 轻量开关：在 CI 中置为 1，避免加载所有重依赖
 const E2E_LIGHT = process.env.E2E_LIGHT === '1';
 
-// -------------------------------
-// 环境检查（轻量模式下不强制 JWT）
-// -------------------------------
+// ===== 环境检查（轻量模式下不强制 JWT）=====
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET && !E2E_LIGHT) {
   const message = 'JWT_SECRET environment variable is required';
@@ -33,55 +17,45 @@ if (!JWT_SECRET && !E2E_LIGHT) {
   throw new Error(message);
 }
 
-// CORS 白名单（逗号分隔）
+// CORS 白名单（完整版用）
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
 
-// -------------------------------
-// 初始化应用 & 中间件顺序
-// -------------------------------
+// ===== 初始化应用 =====
 const app = express();
-
-/** 中间件顺序：reqid -> 解析体 -> 安全头 -> CORS -> 路由 */
 app.use(reqid());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(helmet());
 
-// 最小 CORS 控制（轻量模式下放宽；完整版按白名单）
+// CORS：轻量模式放开、完整版按白名单
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-
   if (E2E_LIGHT) {
-    // e2e/CI：允许所有来源，便于测试
     if (origin) res.header('Access-Control-Allow-Origin', origin);
   } else {
     if (origin && !ALLOWED_ORIGINS.includes(origin)) {
       return res.status(403).json({ code: 403, msg: 'forbidden' });
     }
-    if (origin) res.header('Access-Control-Allow-Origin', origin);
-    if (origin) res.header('Vary', 'Origin');
+    if (origin) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Vary', 'Origin');
+    }
     res.header('Access-Control-Allow-Credentials', 'true');
   }
-
   const requestHeaders = req.headers['access-control-request-headers'];
   res.header(
     'Access-Control-Allow-Headers',
     requestHeaders ? String(requestHeaders) : 'Authorization,Content-Type'
   );
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 
-// -------------------------------
-// 保留 main 分支的 Mock 文件服务
-// /mock/:file -> 若存在仓库根/resumes_pdf/<file> 则返回该文件
-//               否则回一个最小 PDF 占位内容
-// -------------------------------
+// ===== Mock PDF 静态返回（两种模式都保留）=====
 app.get('/mock/:file', (req, res) => {
   const filename = req.params.file;
   const filePath = path.join(process.cwd(), 'resumes_pdf', filename);
@@ -89,22 +63,14 @@ app.get('/mock/:file', (req, res) => {
     return res.sendFile(filePath);
   }
   res.setHeader('Content-Type', 'application/pdf');
-  // 一个最小可被识别的 PDF 占位
   res.send(Buffer.from('%PDF-1.4\n% mock\n'));
 });
 
-// -------------------------------
-// 健康检查（所有模式都要有）
-// -------------------------------
-app.get('/v1/health', (_req, res) => {
-  res.json({ code: 0, msg: 'ok' });
-});
+// ===== 健康检查（两种模式都保留）=====
+app.get('/v1/health', (_req, res) => res.json({ code: 0, msg: 'ok' }));
 
-// -------------------------------
-// 轻量模式：仅保留 下载签名 + 订单（内存）
-// -------------------------------
+// ===== 轻量模式：仅保留下载+订单内存实现 =====
 if (E2E_LIGHT) {
-  // 假签名下载
   app.get('/v1/file/download', (req, res) => {
     const fileId = req.query.file_id || req.query.fileId;
     if (!fileId) return res.status(400).json({ code: 400, msg: 'file_id required' });
@@ -112,71 +78,87 @@ if (E2E_LIGHT) {
     return res.json({ code: 0, msg: 'ok', data: { url, expiresInSec: 180 } });
   });
 
-  // 订单（内存实现）
-  const MEM_ORDERS = new Map(); // key: out_trade_no -> { status, amount, plan }
-
-  function genOutTradeNo() {
-    const t = Date.now().toString();
-    return 'ORD' + t.slice(-8) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-  }
+  const MEM_ORDERS = new Map();
+  const genOutTradeNo = () =>
+    'ORD' +
+    Date.now().toString().slice(-8) +
+    Math.floor(Math.random() * 1000).toString().padStart(3, '0');
 
   app.post('/v1/order/create', (req, res) => {
-    try {
-      const { plan = 'basic', amount = 1990 } = req.body || {};
-      const out_trade_no = genOutTradeNo();
-      MEM_ORDERS.set(out_trade_no, { status: 'created', amount, plan, created_at: Date.now() });
-      const prepay_id = 'mock_prepay_' + out_trade_no;
-      res.json({ code: 0, msg: 'ok', data: { out_trade_no, prepay_id } });
-    } catch (e) {
-      res.status(500).json({ code: 500, msg: e?.message || 'error' });
-    }
+    const { plan = 'basic', amount = 1990 } = req.body || {};
+    const out_trade_no = genOutTradeNo();
+    MEM_ORDERS.set(out_trade_no, { status: 'created', amount, plan, created_at: Date.now() });
+    res.json({ code: 0, msg: 'ok', data: { out_trade_no, prepay_id: 'mock_prepay_' + out_trade_no } });
   });
 
   app.get('/v1/order/status', (req, res) => {
-    try {
-      const out_trade_no = String(req.query.out_trade_no || '');
-      if (!out_trade_no) return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
-      const order = MEM_ORDERS.get(out_trade_no);
-      if (!order) return res.status(404).json({ code: 404, msg: 'order not found' });
-      res.json({ code: 0, msg: 'ok', data: { out_trade_no, status: order.status, amount: order.amount, plan: order.plan } });
-    } catch (e) {
-      res.status(500).json({ code: 500, msg: e?.message || 'error' });
-    }
+    const out_trade_no = String(req.query.out_trade_no || '');
+    if (!out_trade_no) return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
+    const order = MEM_ORDERS.get(out_trade_no);
+    if (!order) return res.status(404).json({ code: 404, msg: 'order not found' });
+    res.json({ code: 0, msg: 'ok', data: { out_trade_no, status: order.status, amount: order.amount, plan: order.plan } });
   });
 
   app.post('/v1/order/callback', (req, res) => {
-    try {
-      const { out_trade_no, result = 'SUCCESS', amount } = req.body || {};
-      if (!out_trade_no) return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
-      const order = MEM_ORDERS.get(out_trade_no);
-      if (!order) return res.status(404).json({ code: 404, msg: 'order not found' });
-      if (result === 'SUCCESS') {
-        if (amount != null && Number(amount) !== Number(order.amount)) {
-          return res.status(400).json({ code: 400, msg: 'amount mismatch' });
-        }
-        order.status = 'paid';
-        order.paid_at = Date.now();
-      } else {
-        order.status = 'failed';
+    const { out_trade_no, result = 'SUCCESS', amount } = req.body || {};
+    if (!out_trade_no) return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
+    const order = MEM_ORDERS.get(out_trade_no);
+    if (!order) return res.status(404).json({ code: 404, msg: 'order not found' });
+    if (result === 'SUCCESS') {
+      if (amount != null && Number(amount) !== Number(order.amount)) {
+        return res.status(400).json({ code: 400, msg: 'amount mismatch' });
       }
-      MEM_ORDERS.set(out_trade_no, order);
-      res.json({ code: 0, msg: 'ok', data: { out_trade_no, status: order.status } });
-    } catch (e) {
-      res.status(500).json({ code: 500, msg: e?.message || 'error' });
+      order.status = 'paid';
+      order.paid_at = Date.now();
+    } else {
+      order.status = 'failed';
     }
+    MEM_ORDERS.set(out_trade_no, order);
+    res.json({ code: 0, msg: 'ok', data: { out_trade_no, status: order.status } });
   });
 } else {
-  // -------------------------------
-  // 非轻量（完整版）路由：你原本的所有功能都放这里
-  // -------------------------------
+  // ===== 完整模式：动态导入所有重依赖（只在这里加载）=====
 
-  // 文件/结果/用户模块
+  // 动态导入轻量路由以外的模块
+  const [{ createFileRouter }] = await Promise.all([
+    import('./modules/file/index.js'),
+  ]);
+
+  const [{ createResultsRouter }] = await Promise.all([
+    import('./modules/results/index.js'),
+  ]);
+
+  const [{ createUsersRouter }] = await Promise.all([
+    import('./modules/users/index.js'),
+  ]);
+
+  // 非轻量才用到的工具/适配/中间件/DB（动态导入）
+  const [{ default: jwtMiddleware }] = await Promise.all([
+    import('./middlewares/jwt.js'),
+  ]);
+  const [{ listTemplates }] = await Promise.all([
+    import('../../../packages/templates/index.js'),
+  ]);
+  const [{ resumeToHTML }] = await Promise.all([
+    import('./render.template.js'),
+  ]);
+  const [{ htmlToPDFBuffer }] = await Promise.all([
+    import('./render.playwright.js'),
+  ]);
+  const [{ getSignedUrl }] = await Promise.all([
+    import('../../../packages/adapters/cos/index.js'),
+  ]);
+  const [{ prisma }] = await Promise.all([
+    import('./db.js'),
+  ]);
+
+  // 路由挂载
   app.use(createFileRouter());
   app.use(createResultsRouter());
   app.use(createUsersRouter());
 
   // 模板清单
-  app.get('/v1/templates', (req, res) => {
+  app.get('/v1/templates', (_req, res) => {
     try {
       const templates = listTemplates();
       res.json({ code: 0, data: templates });
@@ -185,8 +167,8 @@ if (E2E_LIGHT) {
     }
   });
 
-  // 渲染（mock）：读取样例 JSON -> PDF buffer -> 返回字节数
-  app.post('/v1/render/mock', async (req, res) => {
+  // 渲染（mock）
+  app.post('/v1/render/mock', async (_req, res) => {
     try {
       const repoRoot = path.resolve(process.cwd(), '../../');
       const samplePath = path.join(repoRoot, 'samples/resume/alice.json');
@@ -199,7 +181,7 @@ if (E2E_LIGHT) {
     }
   });
 
-  // 真实PDF渲染：Playwright
+  // 真实 PDF 渲染
   app.post('/v1/render/pdf', async (req, res) => {
     try {
       const html = String(req.body?.html || '<h1>Test PDF</h1>');
@@ -218,20 +200,18 @@ if (E2E_LIGHT) {
       const body = req.body || {};
       const templateId = body.templateId || 'classic';
       const resume = body.resume || JSON.parse(fs.readFileSync(samplePath, 'utf-8'));
-
       const html = resumeToHTML(resume, templateId);
       const buf = await htmlToPDFBuffer(html);
-
       const fid = 'resume-' + Date.now() + '.pdf';
-      const url = await getSignedUrl(fid); // 来自 adapters/cos 的假签名 URL
+      const url = await getSignedUrl(fid);
       res.json({ code: 0, data: { file_id: fid, bytes: buf.length, url } });
     } catch (e) {
       res.status(500).json({ code: 500, msg: e?.message || 'render error' });
     }
   });
 
-  // OpenAPI JSON（若存在 src/openapi.json）
-  app.get('/v1/openapi.json', (req, res) => {
+  // OpenAPI JSON
+  app.get('/v1/openapi.json', (_req, res) => {
     try {
       const p = path.resolve(process.cwd(), 'src/openapi.json');
       const json = fs.readFileSync(p, 'utf-8');
@@ -251,7 +231,6 @@ if (E2E_LIGHT) {
       const report = body.report || {};
       const file_id = body.file?.file_id || null;
       const bytes = body.file?.bytes ?? null;
-
       const row = await prisma.result.create({
         data: { user_id, match, report, file_id, bytes },
       });
@@ -264,7 +243,7 @@ if (E2E_LIGHT) {
   // 从 DB 拉取结果列表
   app.get('/v1/results/db', async (req, res) => {
     try {
-      const user_id = String(req.query.user_id || 'demo'); // 默认 demo
+      const user_id = String(req.query.user_id || 'demo');
       const rows = await prisma.result.findMany({
         where: { user_id },
         orderBy: { created_at: 'desc' },
@@ -294,8 +273,6 @@ if (E2E_LIGHT) {
   });
 }
 
-// -------------------------------
-// 启动
-// -------------------------------
+// ===== 启动服务 =====
 const port = Number(process.env.PORT || 8080);
 app.listen(port, () => console.log(`API listening on ${port} (light=${E2E_LIGHT})`));
