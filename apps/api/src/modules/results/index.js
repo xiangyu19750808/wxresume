@@ -27,7 +27,7 @@ function pickParams(req) {
     body.reportId ??
     q.report_id ??
     q.reportId ??
-    null; // 兜底
+    null;
 
   const score = safeNumber(body.score ?? q.score, 0);
   const meta = (body.meta && typeof body.meta === 'object') ? body.meta : {};
@@ -48,32 +48,26 @@ function fail(res, status, msg) {
 export function createResultsRouter() {
   const router = Router();
 
-  // 保存（内存模拟；与 /v1/results 行为一致）
   router.post('/v1/results/save', (req, res) => {
     const { report_id, score, meta } = pickParams(req);
     if (!report_id) return fail(res, 400, 'report_id required');
-
     const item = buildItem({ report_id, score, meta });
     mem.results.unshift(item);
     return ok(res, item);
   });
 
-  // 读取（内存模拟的“DB列表”）
   router.get('/v1/results/db', (_req, res) => {
     return ok(res, mem.results);
   });
 
-  // 兼容的创建接口（与 save 同逻辑）
   router.post('/v1/results', (req, res) => {
     const { report_id, score, meta } = pickParams(req);
     if (!report_id) return fail(res, 400, 'report_id required');
-
     const item = buildItem({ report_id, score, meta });
     mem.results.unshift(item);
     return ok(res, item);
   });
 
-  // 列表（与 /v1/results/db 一致）
   router.get('/v1/results', (_req, res) => {
     return ok(res, mem.results);
   });
