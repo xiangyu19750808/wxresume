@@ -96,3 +96,15 @@ model FileObject {
   created_at DateTime @default(now())
   User       User     @relation(fields: [user_id], references: [id])
 }
+model Result {
+  id         String   @id @default(cuid())
+  user_id    String
+  report_id  String?          // 可选：如果你想单独存report_id
+  match      Json
+  report     Json
+  file_id    String?
+  bytes      Int?
+  created_at DateTime @default(now())
+
+  @@index([user_id, created_at(sort: Desc)])
+}
