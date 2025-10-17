@@ -118,39 +118,16 @@ if (E2E_LIGHT) {
   });
 } else {
   // ===== 完整模式：动态导入所有重依赖（只在这里加载）=====
+  const [{ createFileRouter }] = await Promise.all([import('./modules/file/index.js')]);
+  const [{ createResultsRouter }] = await Promise.all([import('./modules/results/index.js')]);
+  const [{ createUsersRouter }] = await Promise.all([import('./modules/users/index.js')]);
 
-  // 动态导入轻量路由以外的模块
-  const [{ createFileRouter }] = await Promise.all([
-    import('./modules/file/index.js'),
-  ]);
-
-  const [{ createResultsRouter }] = await Promise.all([
-    import('./modules/results/index.js'),
-  ]);
-
-  const [{ createUsersRouter }] = await Promise.all([
-    import('./modules/users/index.js'),
-  ]);
-
-  // 非轻量才用到的工具/适配/中间件/DB（动态导入）
-  const [{ default: jwtMiddleware }] = await Promise.all([
-    import('./middlewares/jwt.js'),
-  ]);
-  const [{ listTemplates }] = await Promise.all([
-    import('../../../packages/templates/index.js'),
-  ]);
-  const [{ resumeToHTML }] = await Promise.all([
-    import('./render.template.js'),
-  ]);
-  const [{ htmlToPDFBuffer }] = await Promise.all([
-    import('./render.playwright.js'),
-  ]);
-  const [{ getSignedUrl }] = await Promise.all([
-    import('../../../packages/adapters/cos/index.js'),
-  ]);
-  const [{ prisma }] = await Promise.all([
-    import('./db.js'),
-  ]);
+  const [{ default: jwtMiddleware }] = await Promise.all([import('./middlewares/jwt.js')]);
+  const [{ listTemplates }] = await Promise.all([import('../../../packages/templates/index.js')]);
+  const [{ resumeToHTML }] = await Promise.all([import('./render.template.js')]);
+  const [{ htmlToPDFBuffer }] = await Promise.all([import('./render.playwright.js')]);
+  const [{ getSignedUrl }] = await Promise.all([import('../../../packages/adapters/cos/index.js')]);
+  const [{ prisma }] = await Promise.all([import('./db.js')]);
 
   // 路由挂载
   app.use(createFileRouter());
@@ -215,7 +192,7 @@ if (E2E_LIGHT) {
     try {
       const p = path.resolve(process.cwd(), 'src/openapi.json');
       const json = fs.readFileSync(p, 'utf-8');
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.send(json);
     } catch (e) {
       res.status(500).json({ code: 500, msg: e?.message || 'openapi error' });
