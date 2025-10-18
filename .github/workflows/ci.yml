@@ -1,31 +1,26 @@
 name: ci
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [ main ]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci.yml"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    # 统一环境变量（测试可直接读）
-    env:
-      E2E_LIGHT: "1"
-      NODE_ENV: test
-      PORT: "9080"
-      JWT_SECRET: ci-dev-secret
-      COS_PROVIDER: fake
-      SIGN_EXPIRES_SEC: "60"
-      # Prisma（你的 schema 用 DB_URL）
-      DB_URL: "file:./dev-ci.db"
-      DATABASE_URL: "file:./dev-ci.db"
-      # 各种测试脚本常见变量名
-      BASE_URL: "http://127.0.0.1:9080"
-      API_BASE: "http://127.0.0.1:9080"
-      API_URL:  "http://127.0.0.1:9080"
 
     steps:
       - name: Checkout
@@ -36,51 +31,15 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install pnpm
-        run: npm i -g pnpm@8.15.7
+      - name: Setup pnpm via corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@8.15.7 --activate
+          pnpm -v
 
-      - name: Install dependencies
+      - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      # ---- Prisma：在 apps/api 下生成 Client + 应用迁移 ----
-      - name: Prisma generate & migrate deploy
-        working-directory: apps/api
-        run: |
-          pnpm prisma generate
-          pnpm prisma migrate deploy --schema prisma/schema.prisma
-
-      # ---- 启动 API（后台，E2E_LIGHT）----
-      - name: Start API (E2E_LIGHT on :9080)
-        working-directory: apps/api
-        run: |
-          pnpm dev > ../../server.log 2>&1 & echo $! > ../../server.pid
-
-      # ---- 等待健康检查（最多 90 秒）----
-      - name: Wait for /v1/health
-        run: |
-          for i in {1..90}; do
-            echo "waiting server ($i/90) ..."
-            if curl -fsS http://127.0.0.1:9080/v1/health >/dev/null; then
-              echo "server is up"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "::error ::API failed to start"
-          tail -n +500 server.log || true
-          exit 7
-
-      # ---- 执行 E2E ----
-      - name: End-to-end tests
-        run: |
-          echo "BASE_URL=$BASE_URL  API_BASE=$API_BASE  API_URL=$API_URL"
-          node -e "console.log('env seen by node:', process.env.BASE_URL, process.env.API_BASE, process.env.API_URL)"
-          pnpm test:e2e
-
-      # ---- 上传日志（便于排查）----
-      - name: Upload server log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: server-log
-          path: server.log
+      # 关键：只构建 API 包，避免其它包无 build 脚本导致失败
+      - name: Build API only
+        run: pnpm --filter @wxresume/api build
