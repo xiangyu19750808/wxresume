@@ -1,4 +1,5 @@
-﻿name: ci
+name: ci
+
 on:
   push:
     branches: [ main ]
@@ -9,6 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,17 +23,26 @@ jobs:
       - name: Install pnpm
         run: npm i -g pnpm@8.15.7
 
-      - name: Install deps
+      - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      # 启动轻量 API → 等 /v1/health → 执行 e2e
       - name: End-to-end tests (E2E_LIGHT)
         run: |
+          # 必要环境变量（轻量假依赖）
           export E2E_LIGHT=1
           export PORT=9080
+          export NODE_ENV=test
+          export JWT_SECRET=ci-dev-secret
+          export COS_PROVIDER=fake
+          export SIGN_EXPIRES_SEC=60
+
+          # 启动服务
           pnpm -C apps/api dev > server.log 2>&1 & echo $! > server.pid
 
+          # 等待健康检查（最多 90 秒）
           for i in {1..90}; do
-            echo "waiting server (/90) ..."
+            echo "waiting server ($i/90) ..."
             if curl -fsS http://127.0.0.1:9080/v1/health >/dev/null; then
               echo "server is up"
               break
@@ -39,12 +50,14 @@ jobs:
             sleep 1
           done
 
+          # 启动失败 → 打印日志并退出
           if ! curl -fsS http://127.0.0.1:9080/v1/health >/dev/null; then
             echo "::error ::API failed to start"
             tail -n +1 server.log || true
             exit 7
           fi
 
+          # 跑 e2e（Playwright API 或 Supertest 均可）
           BASE_URL=http://127.0.0.1:9080 pnpm test:e2e
 
       - name: Upload server log
