@@ -37,6 +37,9 @@ jobs:
           npx -y pnpm@8.15.7 -v
           npx -y pnpm@8.15.7 install --no-frozen-lockfile
 
+      - name: End-to-end tests
+        run: npx -y pnpm@8.15.7 run test:e2e
+
       # - name: Build
       #   run: npx -y pnpm@8.15.7 -r build
 

@@ -13,6 +13,9 @@ importers:
       '@prisma/client':
         specifier: 6.17.1
         version: 6.17.1(prisma@6.17.1)
+      '@wxresume/adapters-wxpay':
+        specifier: workspace:*
+        version: link:../../packages/adapters/wxpay
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -35,6 +38,10 @@ importers:
       prisma:
         specifier: 6.17.1
         version: 6.17.1
+
+  packages/adapters/cos: {}
+
+  packages/adapters/wxpay: {}
 
 packages:
 

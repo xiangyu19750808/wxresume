@@ -4,12 +4,17 @@ import express from 'express';
 import helmet from 'helmet';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createUsersRouter } from './modules/users/index.js';
-import { createFileRouter } from './modules/file/index.js';
+import jwt from 'jsonwebtoken';
+import { createUsersRouter } from "./modules/users/index.js";
+import { createFileRouter } from "./modules/file/index.js";
+import { createOrderRouter } from "./modules/order/index.js";
 
 
 import { listTemplates, renderPDF } from "../../../packages/templates/index.js";
 import jwtMiddleware from "./middlewares/jwt.js";
+import requestIdMiddleware from "./middlewares/reqid.js";
+import requestLogger from "./middlewares/logger.js";
+import errorHandler from "./middlewares/errors.js";
 
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -20,14 +25,18 @@ if (!JWT_SECRET) {
   throw new Error(message);
 }
 
-const app = express(); 
-//app.use(fileRoutes); 
+const app = express();
+
+app.use(requestIdMiddleware);
+app.use(requestLogger);
+app.use(express.json());
+app.use(helmet());
+
+//app.use(fileRoutes);
 app.use(createFileRouter());
 app.use(createResultsRouter());
-app.use(express.json()); 
-
-app.use(helmet()); 
 app.use(createUsersRouter());
+app.use(createOrderRouter());
 
 // 简易 Mock 文件服务：优先从项目根的 /resumes_pdf 读文件，不在就回一个占位 PDF
 app.get('/mock/:file', (req, res) => {
@@ -54,7 +63,7 @@ app.use((req, res, next) => {
   }
 
   if (!ALLOWED_ORIGINS.includes(origin)) {
-    return res.status(403).json({ code: 403, msg: "forbidden" });
+    return res.fail(403, "forbidden");
   }
 
   res.header("Access-Control-Allow-Origin", origin);
@@ -78,7 +87,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/v1/health", (req, res) => res.json({ code: 0, msg: "ok" }));
+app.get("/v1/health", (req, res) => res.ok(null, "ok"));
 
 app.get("/v1/templates", (req, res) => {
   try {
@@ -241,63 +250,7 @@ app.get("/v1/users/me", jwtMiddleware, (req, res) => {
   res.json({ code: 0, data: { user } });
 });
 
-// ===== Order mock: /v1/order/create =====
-const MEM_ORDERS = new Map(); // key: out_trade_no, val: {status, amount, plan}
-
-function genOutTradeNo() {
-  const t = Date.now().toString();
-  return "ORD" + t.slice(-8) + Math.floor(Math.random()*1000).toString().padStart(3,"0");
-}
-
-// 创建订单（占位，返回假 prepay_id）
-app.post("/v1/order/create", (req, res) => {
-  try {
-    const { plan = "basic", amount = 1990 } = req.body || {};
-    const out_trade_no = genOutTradeNo();
-    MEM_ORDERS.set(out_trade_no, { status: "created", amount, plan, created_at: Date.now() });
-    const prepay_id = "mock_prepay_" + out_trade_no;
-    res.json({ code: 0, data: { out_trade_no, prepay_id } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || "error" });
-  }
-});
-
-// 查询订单状态（占位）
-app.get("/v1/order/status", (req, res) => {
-  try {
-    const out_trade_no = String(req.query.out_trade_no || "");
-    if (!out_trade_no) return res.status(400).json({ code: 400, msg: "missing out_trade_no" });
-    const order = MEM_ORDERS.get(out_trade_no);
-    if (!order) return res.status(404).json({ code: 404, msg: "order not found" });
-    res.json({ code: 0, data: { out_trade_no, status: order.status, amount: order.amount, plan: order.plan } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || "error" });
-  }
-});
-
-// 支付回调占位：将订单置为 paid（真实环境需验签）
-app.post("/v1/order/callback", (req, res) => {
-  try {
-    const { out_trade_no, result = "SUCCESS", amount } = req.body || {};
-    if (!out_trade_no) return res.status(400).json({ code: 400, msg: "missing out_trade_no" });
-    const order = MEM_ORDERS.get(out_trade_no);
-    if (!order) return res.status(404).json({ code: 404, msg: "order not found" });
-    if (result === "SUCCESS") {
-      if (amount != null && Number(amount) !== Number(order.amount)) {
-        return res.status(400).json({ code: 400, msg: "amount mismatch" });
-      }
-      order.status = "paid";
-      order.paid_at = Date.now();
-      MEM_ORDERS.set(out_trade_no, order);
-    } else {
-      order.status = "failed";
-      MEM_ORDERS.set(out_trade_no, order);
-    }
-    res.json({ code: 0, data: { out_trade_no, status: order.status } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || "error" });
-  }
-});
+// Order routes handled via dedicated router
 // ===== Results (memory) =====
 const MEM_RESULTS = new Map();
 function newResult({ user_id="demo", match={}, report={}, file={} }) {
@@ -455,3 +408,5 @@ app.post("/v1/results/save", async (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || "db error" });
   }
 });
+
+app.use(errorHandler);
