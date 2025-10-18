@@ -260,9 +260,7 @@ if (E2E_LIGHT) {
   });
 
 } else {
-  // =========================
-  // 完整模式：动态导入重依赖与模块
-  // =========================
+
   const [{ createFileRouter }] = await Promise.all([import('./modules/file/index.js')]);
   const [{ createResultsRouter }] = await Promise.all([import('./modules/results/index.js')]);
   const [{ createUsersRouter }] = await Promise.all([import('./modules/users/index.js')]);
@@ -337,7 +335,7 @@ if (E2E_LIGHT) {
     try {
       const p = path.resolve(process.cwd(), 'src/openapi.json');
       const json = fs.readFileSync(p, 'utf-8');
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.send(json);
     } catch (e) {
       res.status(500).json({ code: 500, msg: e?.message || 'openapi error' });
