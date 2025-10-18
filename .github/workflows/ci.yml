@@ -1,9 +1,6 @@
 name: ci
 
-
 on:
-  workflow_dispatch:
-
   pull_request:
     branches: [ main ]
     paths:
@@ -12,16 +9,18 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - ".github/workflows/ci.yml"
-
   push:
     branches: [ main ]
     paths:
-      - "**"
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci.yml"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -32,16 +31,18 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies (pnpm via npx)
+      - name: Setup pnpm via corepack
         run: |
-          npx -y pnpm@8.15.7 -v
-          npx -y pnpm@8.15.7 install --no-frozen-lockfile
+          corepack enable
+          corepack prepare pnpm@8.15.7 --activate
+          pnpm -v
+
+      - name: Install deps
+        run: pnpm install --no-frozen-lockfile
 
       - name: End-to-end tests
         run: npx -y pnpm@8.15.7 run test:e2e
 
-      # - name: Build
-      #   run: npx -y pnpm@8.15.7 -r build
-
-      # - name: Test
-      #   run: npx -y pnpm@8.15.7 -r test
+      # 关键：只构建 API 包，避免其它包无 build 脚本导致失败
+      - name: Build API only
+        run: pnpm --filter @wxresume/api build

@@ -1,3 +1,4 @@
+// apps/api/src/middlewares/reqid.js
 import { randomUUID } from 'node:crypto';
 
 const RESERVED_RESPONSE_KEYS = new Set(['code', 'msg', 'data', 'requestId']);
@@ -17,19 +18,17 @@ function normalizePayload(payload, requestId) {
     if (!('msg' in normalized)) {
       normalized.msg = normalized.code === 0 ? 'ok' : 'error';
     }
+  }
 
-    if (!('data' in normalized)) {
-      const rest = {};
-
-      for (const key of Object.keys(normalized)) {
-        if (!RESERVED_RESPONSE_KEYS.has(key)) {
-          rest[key] = normalized[key];
-          delete normalized[key];
-        }
+  if (!('data' in normalized)) {
+    const rest = {};
+    for (const key of Object.keys(normalized)) {
+      if (!RESERVED_RESPONSE_KEYS.has(key)) {
+        rest[key] = normalized[key];
+        delete normalized[key];
       }
-
-      normalized.data = Object.keys(rest).length ? rest : null;
     }
+    normalized.data = Object.keys(rest).length ? rest : null;
   }
 
   return normalized;

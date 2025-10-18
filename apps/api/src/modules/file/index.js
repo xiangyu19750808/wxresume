@@ -1,23 +1,33 @@
+// apps/api/src/modules/file/index.js
 import { Router } from 'express';
 
-/**
- * 极简版文件下载签名接口（demo）
- * GET /v1/file/download?file_id=resume-*.pdf
- * 返回 { code:0, data:{ url, expiresInSec } }
- */
+const DEFAULT_EXPIRES = 180;
+
 export function createFileRouter() {
   const router = Router();
 
-  router.get('/v1/file/download', (req, res) => {
-    const fileId = req.query.file_id;
-    if (!fileId) {
-      return res.fail ? res.fail(400, 'file_id required') : res.status(400).json({ code: 400, msg: 'file_id required' });
+  // POST /v1/file/download  body: { file_id?: string, key?: string }
+  router.post('/v1/file/download', (req, res) => {
+    const body = req.body || {};
+    const key = body.file_id || body.key;
+    if (!key) {
+      return res.status(400).json({ code: 400, msg: 'file_id required', data: null, requestId: req.requestId });
     }
-    // Demo：直接拼本地 mock 地址（与 CosFakeAdapter 一致）
-    const url = `http://localhost:8080/mock/${encodeURIComponent(fileId)}?t=${Date.now()}`;
-    return res.ok ? res.ok({ url, expiresInSec: 180 }) : res.status(200).json({ code: 0, data: { url, expiresInSec: 180 } });
+    const url = `http://localhost:8080/mock/${encodeURIComponent(key)}?t=${Date.now()}`;
+    return res.json({ code: 0, msg: 'ok', data: { url, expiresInSec: DEFAULT_EXPIRES }, requestId: req.requestId });
+  });
+
+  // GET /v1/file/download?file_id=xxx
+  router.get('/v1/file/download', (req, res) => {
+    const key = req.query.file_id || req.query.fileId;
+    if (!key) {
+      return res.status(400).json({ code: 400, msg: 'file_id required', data: null, requestId: req.requestId });
+    }
+    const url = `http://localhost:8080/mock/${encodeURIComponent(key)}?t=${Date.now()}`;
+    return res.json({ code: 0, msg: 'ok', data: { url, expiresInSec: DEFAULT_EXPIRES }, requestId: req.requestId });
   });
 
   return router;
 }
 
+export default createFileRouter;
