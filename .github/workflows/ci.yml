@@ -18,7 +18,9 @@ jobs:
       PORT: "9080"
       JWT_SECRET: ci-dev-secret
       COS_PROVIDER: fake
-      SIGN_EXPIRES_SEC: "60"
+      SIGN_EXPIRES_SEC: "60" 
+      # Prisma 用这个变量（schema.prisma: env("DB_URL")）
+      DB_URL: "file:./dev-ci.db"
       # CI 用 SQLite 临时库（apps/api 下相对路径）
       DATABASE_URL: "file:./dev-ci.db"
 
