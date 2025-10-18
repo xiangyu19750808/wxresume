@@ -4,12 +4,16 @@ import express from 'express';
 import helmet from 'helmet';
 import fs from 'node:fs';
 import path from 'node:path';
+import jwt from 'jsonwebtoken';
 import { createUsersRouter } from './modules/users/index.js';
 import { createFileRouter } from './modules/file/index.js';
 
 
 import { listTemplates, renderPDF } from "../../../packages/templates/index.js";
 import jwtMiddleware from "./middlewares/jwt.js";
+import requestIdMiddleware from "./middlewares/reqid.js";
+import requestLogger from "./middlewares/logger.js";
+import errorHandler from "./middlewares/errors.js";
 
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -20,13 +24,16 @@ if (!JWT_SECRET) {
   throw new Error(message);
 }
 
-const app = express(); 
-//app.use(fileRoutes); 
+const app = express();
+
+app.use(requestIdMiddleware);
+app.use(requestLogger);
+app.use(express.json());
+app.use(helmet());
+
+//app.use(fileRoutes);
 app.use(createFileRouter());
 app.use(createResultsRouter());
-app.use(express.json()); 
-
-app.use(helmet()); 
 app.use(createUsersRouter());
 
 // 简易 Mock 文件服务：优先从项目根的 /resumes_pdf 读文件，不在就回一个占位 PDF
@@ -54,7 +61,7 @@ app.use((req, res, next) => {
   }
 
   if (!ALLOWED_ORIGINS.includes(origin)) {
-    return res.status(403).json({ code: 403, msg: "forbidden" });
+    return res.fail(403, "forbidden");
   }
 
   res.header("Access-Control-Allow-Origin", origin);
@@ -78,7 +85,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/v1/health", (req, res) => res.json({ code: 0, msg: "ok" }));
+app.get("/v1/health", (req, res) => res.ok(null, "ok"));
 
 app.get("/v1/templates", (req, res) => {
   try {
@@ -455,3 +462,5 @@ app.post("/v1/results/save", async (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || "db error" });
   }
 });
+
+app.use(errorHandler);
