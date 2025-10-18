@@ -12,6 +12,7 @@ function signToken({ id, role = 'user' }) {
   return jwt.sign({ id, role }, JWT_SECRET, TOKEN_OPTIONS);
 }
 
+<<<<<<< HEAD
 async function loadUserById(userId) {
   return prisma.user.findUnique({ where: { id: userId }, select: USER_SELECT });
 }
@@ -49,6 +50,34 @@ export function createUsersRouter({ logger = console } = {}) {
       (logger?.error || console.error)('[users.profile] fetch failed', err);
       return res.status(500).json({ code: 500, msg: 'internal error' });
     }
+=======
+    const userId = Number(raw);
+    if (!userId) {
+      return res.fail ? res.fail(400, 'user_id required') : res.status(400).json({ code: 400, msg: 'user_id required' });
+    }
+
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      return res.fail ? res.fail(500, 'JWT_SECRET missing') : res.status(500).json({ code: 500, msg: 'JWT_SECRET missing' });
+    }
+
+    const token = jwt.sign({ id: userId, role: 'user' }, secret, {
+      algorithm: 'HS256',
+      expiresIn: '7d',
+    });
+
+    return res.ok ? res.ok({ jwt: token }) : res.status(200).json({ code: 0, data: { jwt: token } });
+  });
+
+  // GET /v1/users/profile —— 示例
+  router.get('/v1/users/profile', (req, res) => {
+    return res.ok
+      ? res.ok({ id: 1, email: 'demo@example.com', nickname: 'demo' })
+      : res.status(200).json({
+          code: 0,
+          data: { id: 1, email: 'demo@example.com', nickname: 'demo' },
+        });
+>>>>>>> origin/codex/implement-x-request-id-error-handling
   });
 
   return router;
