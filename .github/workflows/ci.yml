@@ -11,18 +11,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # 统一环境变量（测试可直接读）
     env:
-      # 统一在 job 级设置轻量环境变量
       E2E_LIGHT: "1"
       NODE_ENV: test
       PORT: "9080"
       JWT_SECRET: ci-dev-secret
       COS_PROVIDER: fake
-      SIGN_EXPIRES_SEC: "60" 
-      # Prisma 用这个变量（schema.prisma: env("DB_URL")）
+      SIGN_EXPIRES_SEC: "60"
+      # Prisma（你的 schema 用 DB_URL）
       DB_URL: "file:./dev-ci.db"
-      # CI 用 SQLite 临时库（apps/api 下相对路径）
       DATABASE_URL: "file:./dev-ci.db"
+      # 各种测试脚本常见变量名
+      BASE_URL: "http://127.0.0.1:9080"
+      API_BASE: "http://127.0.0.1:9080"
+      API_URL:  "http://127.0.0.1:9080"
 
     steps:
       - name: Checkout
@@ -46,7 +49,7 @@ jobs:
           pnpm prisma generate
           pnpm prisma migrate deploy --schema prisma/schema.prisma
 
-      # ---- 启动 API（后台）----
+      # ---- 启动 API（后台，E2E_LIGHT）----
       - name: Start API (E2E_LIGHT on :9080)
         working-directory: apps/api
         run: |
@@ -70,7 +73,9 @@ jobs:
       # ---- 执行 E2E ----
       - name: End-to-end tests
         run: |
-          BASE_URL=http://127.0.0.1:9080 pnpm test:e2e
+          echo "BASE_URL=$BASE_URL  API_BASE=$API_BASE  API_URL=$API_URL"
+          node -e "console.log('env seen by node:', process.env.BASE_URL, process.env.API_BASE, process.env.API_URL)"
+          pnpm test:e2e
 
       # ---- 上传日志（便于排查）----
       - name: Upload server log
