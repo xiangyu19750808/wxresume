@@ -1,27 +1,14 @@
-name: ci
-
+﻿name: ci
 on:
-  workflow_dispatch:
-
-  pull_request:
-    branches: [ main ]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/ci.yml"
-
   push:
     branches: [ main ]
-    paths:
-      - "**"
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,32 +18,38 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies (pnpm via npx)
-        run: |
-          npx -y pnpm@8.15.7 -v
-          npx -y pnpm@8.15.7 install --no-frozen-lockfile
+      - name: Install pnpm
+        run: npm i -g pnpm@8.15.7
 
-      - name: Boot API (light mode)
-        env:
-          E2E_LIGHT: '1'
-          PORT: '9080'
+      - name: Install deps
+        run: pnpm install --no-frozen-lockfile
+
+      - name: End-to-end tests (E2E_LIGHT)
         run: |
-          nohup node apps/api/src/server.js > server.log 2>&1 &
-          for i in $(seq 1 90); do
-            if curl -fsS "http://127.0.0.1:9080/v1/health" >/dev/null; then
-              echo "server is ready"; break
+          export E2E_LIGHT=1
+          export PORT=9080
+          pnpm -C apps/api dev > server.log 2>&1 & echo $! > server.pid
+
+          for i in {1..90}; do
+            echo "waiting server (/90) ..."
+            if curl -fsS http://127.0.0.1:9080/v1/health >/dev/null; then
+              echo "server is up"
+              break
             fi
-            echo "waiting server ($i/90) ..."
             sleep 1
           done
-          curl -fsS "http://127.0.0.1:9080/v1/health"
 
-      - name: End-to-end tests
-        run: npx -y pnpm@8.15.7 run test:e2e
+          if ! curl -fsS http://127.0.0.1:9080/v1/health >/dev/null; then
+            echo "::error ::API failed to start"
+            tail -n +1 server.log || true
+            exit 7
+          fi
 
-      - name: Print server log
+          BASE_URL=http://127.0.0.1:9080 pnpm test:e2e
+
+      - name: Upload server log
         if: always()
-        run: |
-          echo "------------ server.log -------------"
-          tail -n +1 server.log || true
-          echo "-------------------------------------"
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-log
+          path: server.log
