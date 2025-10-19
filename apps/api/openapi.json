@@ -588,35 +588,22 @@
     },
     "/v1/render/pdf": {
       "post": {
-        "summary": "Render arbitrary HTML to PDF",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "html": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "html"
-                ]
-              }
-            }
+        "summary": "Render resume data into PDF using template library",
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "classic",
+              "enum": [
+                "classic",
+                "modern"
+              ]
+            },
+            "description": "Template identifier (classic | modern)"
           }
-        },
-        "responses": {
-          "200": {
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/render/resume": {
-      "post": {
-        "summary": "Render resume JSON via template to PDF",
+        ],
         "requestBody": {
           "required": false,
           "content": {
@@ -625,19 +612,33 @@
                 "type": "object",
                 "properties": {
                   "templateId": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Template identifier when not using query parameter"
                   },
                   "resume": {
-                    "type": "object"
+                    "type": "object",
+                    "description": "JSON Resume payload"
                   }
-                }
+                },
+                "additionalProperties": true
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "ok"
+            "description": "PDF binary",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid template id"
           }
         }
       }

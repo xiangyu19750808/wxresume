@@ -101,6 +101,12 @@ async function jsonFetch(url, init) {
   return { res, body };
 }
 
+async function pdfFetch(url, init) {
+  const res = await fetch(url, init);
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { res, buffer };
+}
+
 test('end-to-end core user journey', async () => {
   // Health check should succeed with request ID
   const { res: healthRes, body: healthBody } = await jsonFetch(`${BASE_URL}/v1/health`);
@@ -131,14 +137,30 @@ test('end-to-end core user journey', async () => {
   assert.equal(meBody.code, 0);
   assert.equal(meBody.data?.user?.id, loginBody.data.user.id);
 
-  // Render mock resume PDF -> expect byte length
-  const { body: renderBody } = await jsonFetch(`${BASE_URL}/v1/render/mock`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
-  });
-  assert.equal(renderBody.code, 0);
-  assert.ok(renderBody.data?.bytes > 0);
+  // Render resume PDF via templates -> expect binary payload and headers
+  const minimalResume = {
+    basics: {
+      name: '测试用户',
+      label: '全栈工程师',
+      email: 'test@example.com'
+    },
+    skills: [
+      { name: '后端', keywords: ['Node.js', '数据库'] },
+      { name: '前端', keywords: ['React', 'TypeScript'] }
+    ]
+  };
+  const { res: pdfRes, buffer: pdfBuffer } = await pdfFetch(
+    `${BASE_URL}/v1/render/pdf?templateId=modern`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume: minimalResume })
+    }
+  );
+  assert.equal(pdfRes.status, 200);
+  assert.equal(pdfRes.headers.get('content-type'), 'application/pdf');
+  assert.equal(pdfRes.headers.get('x-template-id'), 'modern');
+  assert.ok(pdfBuffer.byteLength > 0);
 
   // Request download signature and verify it serves bytes
   const fileId = 'resume-demo.pdf';

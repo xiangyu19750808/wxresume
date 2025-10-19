@@ -29,22 +29,17 @@ curl -s -X POST "%BASE%/v1/order/callback" -H "Content-Type: application/json" -
 curl -s "%BASE%/v1/order/status?out_trade_no=%OTN%" & echo.
 
 echo === render.pdf ===
-powershell -NoLogo -NoProfile -Command "$b=@{html='<div style=\"font-size:24px\">Smoke Test PDF</div>'}|ConvertTo-Json; $r=Invoke-RestMethod -Uri '%BASE%/v1/render/pdf' -Method Post -ContentType 'application/json' -Body $b; $r | ConvertTo-Json -Compress" & echo.
+set "TMP_RENDER=%TEMP%\wxresume-render-%RANDOM%.pdf"
+curl -s -o "%TMP_RENDER%" -w "status=%{http_code} bytes=%{size_download}\n" ^
+  -X POST "%BASE%/v1/render/pdf?templateId=modern" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"resume\":{\"basics\":{\"name\":\"Smoke 用户\",\"label\":\"QA\",\"email\":\"qa@example.com\"},\"skills\":[{\"name\":\"验证\",\"keywords\":[\"脚本\",\"报告\"]}]}}"
+for %%I in ("%TMP_RENDER%") do set "RENDER_SIZE=%%~zI"
+if not defined RENDER_SIZE set "RENDER_SIZE=0"
+echo render.pdf.bytes=%RENDER_SIZE%
+del /f /q "%TMP_RENDER%" >NUL 2>&1
 
-
-echo === render.resume ===
-set "RESUME_RESP="
-set "FILE_ID="
-for /f "usebackq tokens=1* delims=|" %%A in (`powershell -NoLogo -NoProfile -Command "$body=@{templateId='classic'} | ConvertTo-Json; $resp=Invoke-RestMethod -Uri '%BASE%/v1/render/resume' -Method Post -ContentType 'application/json' -Body $body; $json=$resp | ConvertTo-Json -Compress; Write-Output ('JSON|' + $json); Write-Output ('FILE_ID|' + $resp.data.file_id)"`) do (
-  if "%%A"=="JSON" set "RESUME_RESP=%%B"
-  if "%%A"=="FILE_ID" set "FILE_ID=%%B"
-)
-echo !RESUME_RESP!
-if not defined FILE_ID (
-  echo !RESUME_RESP!
-  echo Failed to parse render.resume response
-  exit /b 1
-)
+set "FILE_ID=resume-demo.pdf"
 
 echo === file.download ===
 set "DOWNLOAD_RESP="

@@ -249,9 +249,9 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\"html\":\"<div style=\\\"font-size:24px\\\">你好，PDF</div>\"}"
+          "raw": "{\n  \"resume\": {\n    \"basics\": {\n      \"name\": \"王小明\",\n      \"label\": \"产品经理\",\n      \"email\": \"demo@example.com\"\n    },\n    \"skills\": [\n      {\n        \"name\": \"产品策划\",\n        \"keywords\": [\"MRD\", \"PRD\"]\n      }\n    ],\n    \"work\": [\n      {\n        \"name\": \"假想科技\",\n        \"position\": \"高级产品经理\",\n        \"highlights\": [\"负责APP从0到1交付\"]\n      }\n    ]\n  }\n}"
         },
-        "url": "{{baseUrl}}/v1/render/pdf"
+        "url": "{{baseUrl}}/v1/render/pdf?templateId=classic"
       }
     },
     {

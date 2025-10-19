@@ -37,18 +37,16 @@ curl -s -X POST ${BASE}/v1/order/callback \
 curl -s "${BASE}/v1/order/status?out_trade_no=${OTN}"; echo
 
 echo "=== render.pdf ==="
-curl -s -X POST ${BASE}/v1/render/pdf -H "Content-Type: application/json" \
-  -d '{"html":"<div style=\"font-size:24px\">Smoke Test PDF</div>"}'; echo
+TMP_RENDER=$(mktemp)
+curl -s -o "$TMP_RENDER" -w 'status=%{http_code} bytes=%{size_download}\n' \
+  -X POST "${BASE}/v1/render/pdf?templateId=modern" \
+  -H "Content-Type: application/json" \
+  -d '{"resume":{"basics":{"name":"Smoke 用户","label":"QA","email":"qa@example.com"},"skills":[{"name":"验证","keywords":["脚本","报告"]}]}}'
+RENDER_BYTES=$(wc -c < "$TMP_RENDER")
+echo "render.pdf.bytes=${RENDER_BYTES}"
+rm -f "$TMP_RENDER"
 
-echo "=== render.resume ==="
-RESUME_RESP=$(curl -s -X POST ${BASE}/v1/render/resume -H "Content-Type: application/json" \
-  -d '{"templateId":"classic"}')
-echo "$RESUME_RESP"
-FILE_ID=$(node -e 'const raw = process.argv[2]; try { const obj = JSON.parse(raw); const id = obj?.data?.file_id; if (!id) process.exit(1); process.stdout.write(id); } catch (e) { process.exit(1); }' "--" "$RESUME_RESP") || {
-  echo "$RESUME_RESP"
-  echo "Failed to parse render.resume response"
-  exit 1
-}
+FILE_ID=${FILE_ID:-resume-demo.pdf}
 
 echo "=== file.download ==="
 DOWNLOAD_RESP=$(curl -s "${BASE}/v1/file/download?file_id=${FILE_ID}")
