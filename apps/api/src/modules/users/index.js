@@ -71,6 +71,21 @@ export function createUsersRouter({ logger = console } = {}) {
     }
   });
 
+  // 兼容 /v1/users/me（与 profile 相同响应）
+  router.get('/v1/users/me', jwtMiddleware, async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ code: 401, msg: 'unauthorized' });
+
+    try {
+      const user = await loadUserById(userId);
+      if (!user) return res.status(404).json({ code: 404, msg: 'user not found' });
+      return res.json({ code: 0, data: { user } });
+    } catch (err) {
+      (logger?.error || console.error)('[users.me] fetch failed', err);
+      return res.status(500).json({ code: 500, msg: 'internal error' });
+    }
+  });
+
   return router;
 }
 

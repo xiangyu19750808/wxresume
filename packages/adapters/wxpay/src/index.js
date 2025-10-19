@@ -70,19 +70,57 @@ export async function unifiedOrder(query = {}) {
 }
 
 export async function query(outTradeNoOrQuery = {}) {
-  const outTradeNo =
+  const baseQuery =
     typeof outTradeNoOrQuery === 'string'
-      ? outTradeNoOrQuery
-      : resolveOutTradeNo(outTradeNoOrQuery);
+      ? { out_trade_no: outTradeNoOrQuery }
+      : { ...outTradeNoOrQuery };
+
+  const outTradeNo = resolveOutTradeNo(baseQuery);
+  const tradeState = baseQuery.trade_state || 'SUCCESS';
+  const tradeStateDesc =
+    baseQuery.trade_state_desc || 'Fake payment completed immediately.';
+  const paidAt = baseQuery.paid_at || new Date().toISOString();
+  const amount = baseQuery.amount ?? { total: 0, currency: 'CNY' };
 
   return {
-    trade_state: 'SUCCESS',
-    trade_state_desc: 'Fake payment completed immediately.',
+    trade_state: tradeState,
+    trade_state_desc: tradeStateDesc,
     out_trade_no: outTradeNo,
-    transaction_id: resolveTransactionId(outTradeNo),
-    paid_at: new Date().toISOString(),
+    transaction_id:
+      baseQuery.transaction_id ?? resolveTransactionId(outTradeNo),
+    paid_at: paidAt,
+    amount,
     raw: {
+      ...baseQuery,
       out_trade_no: outTradeNo,
+    },
+  };
+}
+
+export async function refund(outTradeNoOrQuery = {}, amountOverride) {
+  const baseQuery =
+    typeof outTradeNoOrQuery === 'string'
+      ? { out_trade_no: outTradeNoOrQuery }
+      : { ...outTradeNoOrQuery };
+
+  const outTradeNo = resolveOutTradeNo(baseQuery);
+  const amount =
+    amountOverride ?? baseQuery.amount ?? { total: 0, currency: 'CNY' };
+
+  return {
+    status: 'PROCESSING',
+    status_desc: 'Fake refund has been accepted and is processing.',
+    out_trade_no: outTradeNo,
+    refund_id:
+      baseQuery.refund_id || `fake-refund-${Math.random().toString(36).slice(2, 10)}`,
+    transaction_id:
+      baseQuery.transaction_id ?? resolveTransactionId(outTradeNo),
+    amount,
+    accepted_at: new Date().toISOString(),
+    raw: {
+      ...baseQuery,
+      out_trade_no: outTradeNo,
+      amount,
     },
   };
 }

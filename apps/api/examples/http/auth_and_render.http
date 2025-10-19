@@ -7,12 +7,31 @@ GET {{host}}/v1/health
 ### OAuth 模拟登录（返回 JWT）
 GET {{host}}/v1/auth/wx/callback?code=abc123
 
-### 渲染简历（HTML → PDF）
-POST {{host}}/v1/render/resume
+### 渲染简历（模板 → PDF）
+POST {{host}}/v1/render/pdf?templateId=modern
 Content-Type: application/json
 
 {
-  "templateId": "classic"
+  "resume": {
+    "basics": {
+      "name": "王小明",
+      "label": "产品经理",
+      "email": "demo@example.com"
+    },
+    "skills": [
+      {
+        "name": "产品策划",
+        "keywords": ["PRD", "用户调研"]
+      }
+    ],
+    "work": [
+      {
+        "name": "假想科技",
+        "position": "高级产品经理",
+        "highlights": ["负责核心增长项目，月活提升 25%"]
+      }
+    ]
+  }
 }
 
 ### 将一次结果保存到数据库（示例数据）

@@ -36,6 +36,11 @@ importers:
         specifier: 6.17.1
         version: 6.17.1
 
+  packages/adapters/cos: {}
+
+  packages/adapters/wxpay: {}
+  packages/templates: {}
+
 packages:
 
   /@prisma/client@6.17.1(prisma@6.17.1):
