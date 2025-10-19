@@ -29,7 +29,7 @@ jobs:
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      -      - name: Start API (E2E_LIGHT) on 9080
+      - name: Start API (E2E_LIGHT) on 9080
         run: |
           export PORT=9080
           export JWT_SECRET=test-secret
