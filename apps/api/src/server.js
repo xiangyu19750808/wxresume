@@ -15,6 +15,10 @@ import { listTemplates } from '../../../packages/templates/index.js';
 import { resumeToHTML } from './render.template.js';
 import { htmlToPDFBuffer } from './render.playwright.js';
 import { getSignedUrl } from '../../../packages/adapters/cos/index.js';
+import {
+  refund as requestWxpayRefund,
+  verifyCallback as verifyWxpayCallback,
+} from '../../../packages/adapters/wxpay/src/index.js';
 
 // Prisma（/v1/db/ping、/v1/results/save 会使用）
 import { prisma } from './db.js';
@@ -115,7 +119,8 @@ app.get('/mock/:file', (req, res) => {
 // 健康检查
 // -------------------------------
 app.get('/v1/health', (req, res) => {
-  res.json({ code: 0, msg: 'ok' });
+  const requestId = req.requestId || req.id;
+  res.json({ code: 0, msg: 'ok', requestId });
 });
 
 // -------------------------------
@@ -258,7 +263,68 @@ app.post('/v1/analysis/report', (req, res) => {
 // -------------------------------
 // 订单（占位）：create/status/callback
 // -------------------------------
-const MEM_ORDERS = new Map(); // key: out_trade_no -> {status, amount, plan}
+const MEM_ORDERS = new Map(); // key: out_trade_no -> {status, amount, plan, callbacks}
+const APP_CWD = process.cwd();
+const REPO_ROOT = (() => {
+  const candidate = path.resolve(APP_CWD, '../../');
+  if (fs.existsSync(path.join(candidate, 'data'))) return candidate;
+  return APP_CWD;
+})();
+const CALLBACK_AUDIT_LOG = path.join(
+  REPO_ROOT,
+  'data',
+  'logs',
+  'wxpay-callback-audit.log'
+);
+
+function appendCallbackAudit(event) {
+  try {
+    const dir = path.dirname(CALLBACK_AUDIT_LOG);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const line = `${new Date().toISOString()} ${JSON.stringify(event)}\n`;
+    fs.appendFileSync(CALLBACK_AUDIT_LOG, line, 'utf8');
+  } catch (err) {
+    console.warn('[wxpay-callback] audit log append failed', err);
+  }
+}
+
+function resolveCallbackStatus(payload = {}) {
+  const resource = payload.resource || {};
+  return (
+    resource.trade_state ||
+    payload.trade_state ||
+    payload.status ||
+    payload.result ||
+    payload.event_type ||
+    'UNKNOWN'
+  );
+}
+
+function normaliseStatusKey(status) {
+  if (!status) return 'UNKNOWN';
+  return String(status).trim().toUpperCase();
+}
+
+function resolveCallbackAmount(payload = {}) {
+  const fromResource = payload?.resource?.amount;
+  if (fromResource && typeof fromResource === 'object') {
+    if (typeof fromResource.total === 'number') return fromResource.total;
+    if (typeof fromResource.payer_total === 'number') return fromResource.payer_total;
+  }
+
+  const amount = payload?.amount;
+  if (typeof amount === 'number') return amount;
+  if (amount && typeof amount === 'object') {
+    if (typeof amount.total === 'number') return amount.total;
+    if (typeof amount.payer_total === 'number') return amount.payer_total;
+  }
+
+  if (typeof payload?.total === 'number') return payload.total;
+
+  return undefined;
+}
 
 function genOutTradeNo() {
   const t = Date.now().toString();
@@ -269,7 +335,13 @@ app.post('/v1/order/create', (req, res) => {
   try {
     const { plan = 'basic', amount = 1990 } = req.body || {};
     const out_trade_no = genOutTradeNo();
-    MEM_ORDERS.set(out_trade_no, { status: 'created', amount, plan, created_at: Date.now() });
+    MEM_ORDERS.set(out_trade_no, {
+      status: 'created',
+      amount,
+      plan,
+      created_at: Date.now(),
+      callbacks: { total: 0, statuses: {} },
+    });
     const prepay_id = 'mock_prepay_' + out_trade_no;
     res.json({ code: 0, data: { out_trade_no, prepay_id } });
   } catch (e) {
@@ -283,30 +355,177 @@ app.get('/v1/order/status', (req, res) => {
     if (!out_trade_no) return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
     const order = MEM_ORDERS.get(out_trade_no);
     if (!order) return res.status(404).json({ code: 404, msg: 'order not found' });
-    res.json({ code: 0, data: { out_trade_no, status: order.status, amount: order.amount, plan: order.plan } });
+    res.json({
+      code: 0,
+      data: {
+        out_trade_no,
+        status: order.status,
+        amount: order.amount,
+        plan: order.plan,
+        callbacks: order.callbacks,
+      },
+    });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
   }
 });
 
-app.post('/v1/order/callback', (req, res) => {
+app.post('/v1/order/callback', async (req, res) => {
   try {
-    const { out_trade_no, result = 'SUCCESS', amount } = req.body || {};
-    if (!out_trade_no) return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
-    const order = MEM_ORDERS.get(out_trade_no);
-    if (!order) return res.status(404).json({ code: 404, msg: 'order not found' });
-    if (result === 'SUCCESS') {
-      if (amount != null && Number(amount) !== Number(order.amount)) {
-        return res.status(400).json({ code: 400, msg: 'amount mismatch' });
-      }
-      order.status = 'paid';
-      order.paid_at = Date.now();
-      MEM_ORDERS.set(out_trade_no, order);
-    } else {
-      order.status = 'failed';
-      MEM_ORDERS.set(out_trade_no, order);
+    const requestId = req.requestId || req.id;
+    let verified;
+    try {
+      verified = await verifyWxpayCallback(req.headers, req.body);
+    } catch (err) {
+      const statusCode = 400;
+      appendCallbackAudit({
+        type: 'verify_failed',
+        statusCode,
+        message: err?.message || 'invalid signature',
+        reqid: requestId,
+      });
+      return res
+        .status(statusCode)
+        .json({ code: statusCode, msg: 'invalid callback signature' });
     }
-    res.json({ code: 0, data: { out_trade_no, status: order.status } });
+
+    const payload = req.body || {};
+    const out_trade_no = verified.out_trade_no || payload.out_trade_no;
+    if (!out_trade_no) {
+      appendCallbackAudit({
+        type: 'payload_invalid',
+        statusCode: 400,
+        message: 'missing out_trade_no',
+        reqid: requestId,
+      });
+      return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
+    }
+
+    const order = MEM_ORDERS.get(out_trade_no);
+    if (!order) {
+      appendCallbackAudit({
+        type: 'order_not_found',
+        out_trade_no,
+        statusCode: 404,
+        reqid: requestId,
+      });
+      return res.status(404).json({ code: 404, msg: 'order not found' });
+    }
+
+    const statusRaw = resolveCallbackStatus(payload);
+    const statusKey = normaliseStatusKey(statusRaw);
+    const callbacks = order.callbacks || { total: 0, statuses: {} };
+    callbacks.total = (callbacks.total || 0) + 1;
+    const record = callbacks.statuses[statusKey] || {
+      count: 0,
+      processed: false,
+      last_received_at: null,
+    };
+    record.count += 1;
+    record.last_received_at = Date.now();
+    callbacks.statuses[statusKey] = record;
+
+    let statusChanged = false;
+    if (!record.processed) {
+      if (statusKey.includes('SUCCESS')) {
+        const amount = resolveCallbackAmount(payload);
+        if (
+          amount != null &&
+          Number(amount) !== Number(order.amount)
+        ) {
+          appendCallbackAudit({
+            type: 'amount_mismatch',
+            out_trade_no,
+            expected: order.amount,
+            received: amount,
+            statusCode: 400,
+            reqid: requestId,
+          });
+          return res.status(400).json({ code: 400, msg: 'amount mismatch' });
+        }
+        order.status = 'paid';
+        order.paid_at = Date.now();
+      } else {
+        order.status = 'failed';
+      }
+      record.processed = true;
+      record.processed_at = Date.now();
+      statusChanged = true;
+    }
+
+    order.callbacks = callbacks;
+    MEM_ORDERS.set(out_trade_no, order);
+
+    appendCallbackAudit({
+      type: 'callback_processed',
+      out_trade_no,
+      status: statusKey,
+      replay: record.count,
+      total: callbacks.total,
+      statusChanged,
+      reqid: requestId,
+    });
+
+    res.json({
+      code: 0,
+      data: {
+        out_trade_no,
+        status: order.status,
+        status_changed: statusChanged,
+        callbacks,
+      },
+    });
+  } catch (e) {
+    appendCallbackAudit({
+      type: 'callback_internal_error',
+      message: e?.message || 'internal error',
+      reqid: req.requestId || req.id,
+    });
+    res.status(500).json({ code: 500, msg: e?.message || 'error' });
+  }
+});
+
+app.post('/v1/order/refund', jwtMiddleware, async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, msg: 'forbidden' });
+    }
+
+    const { out_trade_no, amount } = req.body || {};
+    if (!out_trade_no) {
+      return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
+    }
+
+    const order = MEM_ORDERS.get(out_trade_no);
+    if (!order) {
+      return res.status(404).json({ code: 404, msg: 'order not found' });
+    }
+
+    const normalisedAmount = (() => {
+      if (typeof amount === 'number') return amount;
+      if (amount && typeof amount.total === 'number') return amount.total;
+      return order.amount;
+    })();
+
+    const refundResult = await requestWxpayRefund({
+      out_trade_no,
+      amount: { total: normalisedAmount, currency: 'CNY' },
+    });
+
+    order.status = 'refunding';
+    order.refund_amount = normalisedAmount;
+    order.refund_requested_at = Date.now();
+    MEM_ORDERS.set(out_trade_no, order);
+
+    res.json({
+      code: 0,
+      data: {
+        out_trade_no,
+        status: 'processing',
+        refund_id: refundResult.refund_id,
+        accepted_at: refundResult.accepted_at,
+      },
+    });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
   }
