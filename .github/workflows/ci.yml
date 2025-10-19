@@ -23,6 +23,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      PORT: "9080"
+      JWT_SECRET: test-secret
+      BASE_URL: http://127.0.0.1:9080
 
     steps:
       - name: Checkout
@@ -42,27 +47,41 @@ jobs:
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      # 启动 API，并等待 9080 端口健康可用（关键修复点）
-      - name: Start API (E2E_LIGHT) on 9080
+      # 如果 api 需要构建或数据库迁移/灌数，请放开这些注释
+      # - name: Build API
+      #   run: pnpm --filter @wxresume/api build
+      # - name: DB migrate
+      #   run: pnpm --filter @wxresume/api migrate
+      # - name: DB seed
+      #   run: pnpm --filter @wxresume/api seed
+
+      - name: Start API on ${{ env.PORT }}
         shell: bash
         run: |
           set -e
-          export PORT=9080
-          export JWT_SECRET=test-secret
-          node apps/api/src/server.js > server.log 2>&1 &
-          for i in {1..90}; do
-            curl -fsS "http://127.0.0.1:${PORT}/v1/health" && exit 0
-            sleep 1
-          done
-          echo "API failed to start"
-          tail -n +1 server.log || true
-          exit 7
+          # 后台启动并记录 PID
+          node apps/api/src/server.js > server.log 2>&1 & echo $! > api.pid
 
-      # 端到端测试（若你用的是统一脚本）
+          # 等待健康就绪（兼容 /v1/health 和 /health）
+          npx --yes wait-on -t 60000 http://127.0.0.1:${PORT}/v1/health || \
+          npx --yes wait-on -t 60000 http://127.0.0.1:${PORT}/health || {
+            echo "API failed to become healthy"
+            tail -n +1 server.log || true
+            exit 7
+          }
+
       - name: Run E2E
         run: pnpm run test:e2e
 
-      # 失败时把 server.log 传出来便于排查
+      - name: Stop API
+        if: always()
+        shell: bash
+        run: |
+          if [ -f api.pid ]; then
+            kill $(cat api.pid) || true
+            rm -f api.pid
+          fi
+
       - name: Upload server log
         if: always()
         uses: actions/upload-artifact@v4
