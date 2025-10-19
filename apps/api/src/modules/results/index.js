@@ -1,4 +1,3 @@
-// apps/api/src/modules/results/index.js
 import { Router } from 'express';
 
 const mem = { results: [] };
@@ -49,8 +48,7 @@ function fail(res, status, msg) {
 export function createResultsRouter() {
   const router = Router();
 
-  // 仅保留“内存版”创建，避免与 server.js 中的 DB 路由冲突
-  // POST /v1/results   body: { report_id?, score?, meta? }
+  // 仅保留内存版创建与列表，避免与 server.js 中的 DB 路由冲突
   router.post('/v1/results', (req, res) => {
     const { report_id, score, meta } = pickParams(req);
     const item = buildItem({ report_id, score, meta });
@@ -73,3 +71,5 @@ export function createResultsRouter() {
 
   return router;
 }
+
+export default createResultsRouter;

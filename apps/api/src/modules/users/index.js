@@ -1,4 +1,3 @@
-// apps/api/src/modules/users/index.js
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import jwtMiddleware from '../../middlewares/jwt.js';
@@ -13,6 +12,7 @@ function ok(res, data) {
   const rid = res.req?.requestId;
   return res.status(200).json({ code: 0, msg: 'ok', data, ...(rid ? { requestId: rid } : {}) });
 }
+
 function fail(res, status, msg) {
   if (typeof res.fail === 'function') return res.fail(status, msg);
   const rid = res.req?.requestId;
@@ -28,7 +28,6 @@ async function loadUserById(userId) {
 }
 
 function parseUserId(raw) {
-  // 既兼容数字 id，也兼容字符串，但优先转成数字（你的 seed 是 id=1）
   const s = String(raw ?? '').trim();
   if (!s) return null;
   if (/^\d+$/.test(s)) return Number(s);
@@ -59,25 +58,27 @@ export function createUsersRouter({ logger = console } = {}) {
 
   // 受保护读取：GET /v1/users/profile（需 JWT）
   router.get('/v1/users/profile', jwtMiddleware, async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ code: 401, msg: 'unauthorized' });
+
     try {
-      const userId = req.user?.id;
-      if (!userId) return fail(res, 401, 'unauthorized');
-
       const user = await loadUserById(userId);
-      if (!user) return fail(res, 404, 'user not found');
-
-      return ok(res, { user });
+      if (!user) return res.status(404).json({ code: 404, msg: 'user not found' });
+      return res.json({ code: 0, data: { user } });
     } catch (err) {
       (logger?.error || console.error)('[users.profile] fetch failed', err);
-      return fail(res, 500, 'internal error');
+      return res.status(500).json({ code: 500, msg: 'internal error' });
     }
   });
 
   return router;
 }
 
-// 可选注册器（保持向后兼容）
+// 便捷注册（可选）
 export function registerUsersModule(app, options = {}) {
   const router = createUsersRouter(options);
   app.use(router);
 }
+
+// 明确导出
+export { createUsersRouter as default };
