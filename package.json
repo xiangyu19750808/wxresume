@@ -1,5 +1,5 @@
-{
-  "name": "wxresume",
+﻿{
+  "name": "wxresume","type":"module",
   "private": true,
   "packageManager": "pnpm@8.15.7",
   "scripts": {
