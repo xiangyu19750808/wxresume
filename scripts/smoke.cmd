@@ -22,7 +22,10 @@ curl -s -X POST "%BASE%/v1/analysis/report" -H "Content-Type: application/json" 
 echo === order.create / callback / status ===
 for /f "usebackq delims=" %%O in (`powershell -NoLogo -NoProfile -Command "$r=Invoke-RestMethod -Uri '%BASE%/v1/order/create' -Method Post -ContentType 'application/json' -Body '{\"plan\":\"basic\",\"amount\":1990}'; $r.data.out_trade_no"`) do set "OTN=%%O"
 echo out_trade_no=%OTN%
-curl -s -X POST "%BASE%/v1/order/callback" -H "Content-Type: application/json" -d "{\"out_trade_no\":\"%OTN%\",\"result\":\"SUCCESS\",\"amount\":1990}" & echo.
+set "_WXPAY_SIG=%WXPAY_FAKE_CALLBACK_SIGNATURE%"
+if "%_WXPAY_SIG%"=="" set "_WXPAY_SIG=wxpay-fake-signature"
+curl -s -X POST "%BASE%/v1/order/callback" -H "Content-Type: application/json" -H "Wechatpay-Signature: %_WXPAY_SIG%" -d "{\"out_trade_no\":\"%OTN%\",\"result\":\"SUCCESS\",\"amount\":1990}" & echo.
+curl -s -X POST "%BASE%/v1/order/callback" -H "Content-Type: application/json" -H "Wechatpay-Signature: %_WXPAY_SIG%" -d "{\"out_trade_no\":\"%OTN%\",\"result\":\"SUCCESS\",\"amount\":1990}" & echo.
 curl -s "%BASE%/v1/order/status?out_trade_no=%OTN%" & echo.
 
 echo === render.pdf ===
