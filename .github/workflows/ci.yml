@@ -3,24 +3,13 @@ name: ci
 on:
   pull_request:
     branches: [ main ]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/ci.yml"
   push:
     branches: [ main ]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/ci.yml"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -31,7 +20,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup pnpm via corepack
+      - name: Setup pnpm
         run: |
           corepack enable
           corepack prepare pnpm@8.15.7 --activate
@@ -40,9 +29,36 @@ jobs:
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      - name: End-to-end tests
-        run: npx -y pnpm@8.15.7 run test:e2e
+      - name: Start API (E2E_LIGHT) on 9080
+        run: |
+          export E2E_LIGHT=1
+          export PORT=9080
+          export JWT_SECRET=test-secret
+          pnpm -C apps/api dev > server.log 2>&1 & echo $! > server.pid
 
-      # 关键：只构建 API 包，避免其它包无 build 脚本导致失败
-      - name: Build API only
-        run: pnpm --filter @wxresume/api build
+          for i in {1..90}; do
+            echo "waiting server ($i/90) ..."
+            if curl -fsS http://127.0.0.1:9080/v1/health >/dev/null; then
+              echo "server is up"
+              break
+            fi
+            sleep 1
+          done
+
+          if ! curl -fsS http://127.0.0.1:9080/v1/health >/dev/null; then
+            echo "::error ::API failed to start"
+            tail -n +200 server.log || true
+            exit 7
+          fi
+
+      - name: Run E2E
+        env:
+          BASE_URL: http://127.0.0.1:9080
+        run: pnpm run test:e2e
+
+      - name: Upload server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-log
+          path: server.log
