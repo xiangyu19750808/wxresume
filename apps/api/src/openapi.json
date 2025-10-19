@@ -588,34 +588,6 @@
     },
     "/v1/render/pdf": {
       "post": {
-        "summary": "Render arbitrary HTML to PDF",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "html": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "html"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "ok"
-          }
-        }
-      }
-    },
-    "/v1/render/resume": {
-      "post": {
         "summary": "Render resume JSON via template to PDF",
         "requestBody": {
           "required": false,

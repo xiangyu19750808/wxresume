@@ -1,0 +1,11 @@
+{
+  "name": "@wxresume/templates",
+  "version": "0.1.0",
+  "type": "module",
+  "private": false,
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json"
+  }
+}
