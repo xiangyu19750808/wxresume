@@ -7,7 +7,7 @@ import path from 'node:path';
 import { createUsersRouter } from './modules/users/index.js';
 import { createFileRouter } from './modules/file/index.js';
 import { createResultsRouter } from './modules/results/index.js';
-import requestIdMiddleware from './middlewares/reqid.js';
+import reqid from './middlewares/reqid.js';
 import jwtMiddleware from './middlewares/jwt.js';
 
 // 可选：模板/渲染工具与 COS 适配占位
