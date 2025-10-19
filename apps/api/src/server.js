@@ -1,8 +1,10 @@
 import 'dotenv/config';
 import express from 'express';
+import jwt from 'jsonwebtoken'
 import helmet from 'helmet';
 import fs from 'node:fs';
 import path from 'node:path';
+import { refund as wxRefund } from '../../../packages/adapters/wxpay/index.js';
 
 import { createUsersRouter } from './modules/users/index.js';
 import { createFileRouter } from './modules/file/index.js';
@@ -22,6 +24,23 @@ import {
 
 // Prisma（/v1/db/ping、/v1/results/save 会使用）
 import { prisma } from './db.js';
+
+// admin-only 中间件（ESM 版）
+const adminOnly = (req, res, next) => {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ code: 401, msg: 'no token' });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev');
+    if (payload.role !== 'admin') {
+      return res.status(403).json({ code: 403, msg: 'forbidden' });
+    }
+    req.user = payload;
+    next();
+  } catch {
+    return res.status(401).json({ code: 401, msg: 'bad token' });
+  }
+};
 
 // -------------------------------
 // 环境检查
@@ -122,6 +141,21 @@ app.get('/v1/health', (req, res) => {
   const requestId = req.requestId || req.id;
   res.json({ code: 0, msg: 'ok', requestId });
 });
+
+// --- P5-003 refund placeholder ---
+app.post('/v1/order/refund', adminOnly, express.json(), async (req, res) => {
+  const { out_trade_no, amount } = req.body || {};
+  if (!out_trade_no || typeof amount !== 'number') {
+    return res.status(400).json({ code: 400, msg: 'bad params' });
+  }
+  try {
+    const r = await wxRefund({ out_trade_no, amount });
+    return res.json({ code: 0, msg: r.status, data: r });
+  } catch (e) {
+    return res.status(500).json({ code: 500, msg: 'refund failed', error: e.message });
+  }
+});
+
 
 // -------------------------------
 // 模板清单
