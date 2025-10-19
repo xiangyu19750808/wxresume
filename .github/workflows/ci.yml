@@ -29,12 +29,17 @@ jobs:
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      - name: Start API (E2E_LIGHT) on 9080
+      -      - name: Start API (E2E_LIGHT) on 9080
         run: |
-          export E2E_LIGHT=1
           export PORT=9080
           export JWT_SECRET=test-secret
-          pnpm -C apps/api dev > server.log 2>&1 & echo $! > server.pid
+          export E2E_LIGHT=1
+          nohup node apps/api/src/server.js > server.log 2>&1 &
+          for i in {1..90}; do
+            curl -fsS http://127.0.0.1:9080/v1/health && break
+            sleep 1
+          done || (echo "API failed to start"; cat server.log; exit 7)
+
 
           for i in {1..90}; do
             echo "waiting server ($i/90) ..."
