@@ -26,7 +26,13 @@ OC=$(curl -s -X POST ${BASE}/v1/order/create -H "Content-Type: application/json"
   -d '{"plan":"basic","amount":1990}')
 echo "$OC"
 OTN=$(echo "$OC" | sed -n 's/.*"out_trade_no":"\([^"]*\)".*/\1/p')
-curl -s -X POST ${BASE}/v1/order/callback -H "Content-Type: application/json" \
+curl -s -X POST ${BASE}/v1/order/callback \
+  -H "Content-Type: application/json" \
+  -H "Wechatpay-Signature: ${WXPAY_FAKE_CALLBACK_SIGNATURE:-wxpay-fake-signature}" \
+  -d "{\"out_trade_no\":\"${OTN}\",\"result\":\"SUCCESS\",\"amount\":1990}"; echo
+curl -s -X POST ${BASE}/v1/order/callback \
+  -H "Content-Type: application/json" \
+  -H "Wechatpay-Signature: ${WXPAY_FAKE_CALLBACK_SIGNATURE:-wxpay-fake-signature}" \
   -d "{\"out_trade_no\":\"${OTN}\",\"result\":\"SUCCESS\",\"amount\":1990}"; echo
 curl -s "${BASE}/v1/order/status?out_trade_no=${OTN}"; echo
 
