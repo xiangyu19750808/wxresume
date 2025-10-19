@@ -1,4 +1,3 @@
-// apps/api/src/modules/users/index.js
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import jwtMiddleware from '../../middlewares/jwt.js';
@@ -8,32 +7,52 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const TOKEN_OPTIONS = { algorithm: 'HS256', expiresIn: '7d' };
 const USER_SELECT = { id: true, email: true, nickname: true, created_at: true };
 
+function ok(res, data) {
+  if (typeof res.ok === 'function') return res.ok(data);
+  const rid = res.req?.requestId;
+  return res.status(200).json({ code: 0, msg: 'ok', data, ...(rid ? { requestId: rid } : {}) });
+}
+
+function fail(res, status, msg) {
+  if (typeof res.fail === 'function') return res.fail(status, msg);
+  const rid = res.req?.requestId;
+  return res.status(status).json({ code: status, msg, data: null, ...(rid ? { requestId: rid } : {}) });
+}
+
 function signToken({ id, role = 'user' }) {
   return jwt.sign({ id, role }, JWT_SECRET, TOKEN_OPTIONS);
 }
 
-<<<<<<< HEAD
 async function loadUserById(userId) {
   return prisma.user.findUnique({ where: { id: userId }, select: USER_SELECT });
+}
+
+function parseUserId(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return Number(s);
+  return s;
 }
 
 export function createUsersRouter({ logger = console } = {}) {
   const router = express.Router();
 
-  // Mock 登录：POST /v1/users/profile { user_id }
+  // Mock 登录：POST /v1/users/profile  body: { user_id }
   router.post('/v1/users/profile', async (req, res) => {
-    const userId = String(req.body?.user_id ?? '').trim();
-    if (!userId) return res.status(400).json({ code: 400, msg: 'user_id required' });
-
     try {
-      const user = await loadUserById(userId);
-      if (!user) return res.status(404).json({ code: 404, msg: 'user not found' });
+      if (!JWT_SECRET) return fail(res, 500, 'JWT_SECRET missing');
 
-      const token = signToken({ id: user.id });
-      return res.json({ code: 0, data: { token, user } });
+      const userId = parseUserId(req.body?.user_id ?? req.body?.userId);
+      if (userId == null) return fail(res, 400, 'user_id required');
+
+      const user = await loadUserById(userId);
+      if (!user) return fail(res, 404, 'user not found');
+
+      const token = signToken({ id: user.id, role: 'user' });
+      return ok(res, { token, user });
     } catch (err) {
       (logger?.error || console.error)('[users.profile] login failed', err);
-      return res.status(500).json({ code: 500, msg: 'internal error' });
+      return fail(res, 500, 'internal error');
     }
   });
 
@@ -50,34 +69,6 @@ export function createUsersRouter({ logger = console } = {}) {
       (logger?.error || console.error)('[users.profile] fetch failed', err);
       return res.status(500).json({ code: 500, msg: 'internal error' });
     }
-=======
-    const userId = Number(raw);
-    if (!userId) {
-      return res.fail ? res.fail(400, 'user_id required') : res.status(400).json({ code: 400, msg: 'user_id required' });
-    }
-
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      return res.fail ? res.fail(500, 'JWT_SECRET missing') : res.status(500).json({ code: 500, msg: 'JWT_SECRET missing' });
-    }
-
-    const token = jwt.sign({ id: userId, role: 'user' }, secret, {
-      algorithm: 'HS256',
-      expiresIn: '7d',
-    });
-
-    return res.ok ? res.ok({ jwt: token }) : res.status(200).json({ code: 0, data: { jwt: token } });
-  });
-
-  // GET /v1/users/profile —— 示例
-  router.get('/v1/users/profile', (req, res) => {
-    return res.ok
-      ? res.ok({ id: 1, email: 'demo@example.com', nickname: 'demo' })
-      : res.status(200).json({
-          code: 0,
-          data: { id: 1, email: 'demo@example.com', nickname: 'demo' },
-        });
->>>>>>> origin/codex/implement-x-request-id-error-handling
   });
 
   return router;

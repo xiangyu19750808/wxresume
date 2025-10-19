@@ -1,4 +1,3 @@
-// apps/api/src/server.js
 import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
@@ -310,98 +309,6 @@ app.post('/v1/order/callback', (req, res) => {
     res.json({ code: 0, data: { out_trade_no, status: order.status } });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
-  }
-});
-
-// -------------------------------
-// PDF 渲染（Playwright 真渲染）
-// -------------------------------
-app.post('/v1/render/pdf', async (req, res) => {
-  try {
-    const html = String(req.body?.html || '<h1>Test PDF</h1>');
-    const buf = await htmlToPDFBuffer(html);
-    res.json({ code: 0, data: { bytes: buf.length } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'render error' });
-  }
-});
-
-// -------------------------------
-// 用模板把简历渲染为 PDF（真 PDF + 假 URL）
-// -------------------------------
-app.post('/v1/render/resume', async (req, res) => {
-  try {
-    const repoRoot = path.resolve(process.cwd(), '../../');
-    const samplePath = path.join(repoRoot, 'samples/resume/alice.json');
-    const body = req.body || {};
-    const templateId = body.templateId || 'classic';
-    const resume = body.resume || JSON.parse(fs.readFileSync(samplePath, 'utf-8'));
-
-    const html = resumeToHTML(resume, templateId);
-    const buf = await htmlToPDFBuffer(html);
-
-    const fid = 'resume-' + Date.now() + '.pdf';
-    const url = await getSignedUrl(fid); // 来自 adapters/cos 的假签名 URL
-    res.json({ code: 0, data: { file_id: fid, bytes: buf.length, url } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'render error' });
-  }
-});
-
-// -------------------------------
-// OpenAPI JSON（若存在 src/openapi.json）
-// -------------------------------
-app.get('/v1/openapi.json', (req, res) => {
-  try {
-    const p = path.resolve(process.cwd(), 'src/openapi.json');
-    const json = fs.readFileSync(p, 'utf-8');
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.send(json);
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'openapi error' });
-  }
-});
-
-// -------------------------------
-// 保存结果到 DB
-// -------------------------------
-app.post('/v1/results/save', async (req, res) => {
-  try {
-    const body = req.body || {};
-    const user_id = body.user_id || 'demo';
-    const match = body.match || {};
-    const report = body.report || {};
-    const file_id = body.file?.file_id || null;
-    const bytes = body.file?.bytes ?? null;
-
-    const row = await prisma.result.create({
-      data: { user_id, match, report, file_id, bytes },
-    });
-    res.json({ code: 0, data: { id: row.id, report_id: row.report_id || ('r-' + Date.now()) } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'db error' });
-  }
-});
-
-// -------------------------------
-// /v1/users/me（JWT 保护示例）
-// -------------------------------
-app.get('/v1/users/me', jwtMiddleware, (req, res) => {
-  const uid = req.user?.id;
-  const user = uid ? { id: uid, nickname: '', role: req.user?.role } : null;
-  if (!user) return res.status(401).json({ code: 401, msg: 'unauthorized' });
-  res.json({ code: 0, data: { user } });
-});
-
-// -------------------------------
-// DB ping
-// -------------------------------
-app.get('/v1/db/ping', async (_req, res) => {
-  try {
-    const u = await prisma.user.count();
-    res.json({ code: 0, data: { ok: true, users: u } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'db error' });
   }
 });
 
