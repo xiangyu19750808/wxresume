@@ -255,6 +255,23 @@
       }
     },
     {
+      "name": "render.resume",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"templateId\":\"classic\"}"
+        },
+        "url": "{{baseUrl}}/v1/render/resume"
+      }
+    },
+    {
       "name": "results.demo",
       "request": {
         "method": "POST",

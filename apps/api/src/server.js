@@ -10,14 +10,15 @@ import { createResultsRouter } from './modules/results/index.js';
 import { reqid } from './middlewares/reqid.js';
 import jwtMiddleware from './middlewares/jwt.js';
 
-// 可选：模板/渲染工具与 COS 适配占位
+// 模板/渲染工具
 import {
   listTemplates,
   describeFontSetup,
-  renderResumeHTML
+  renderResumeHTML,
 } from './render.template.js';
 import { htmlToPDFBuffer } from './render.playwright.js';
-import { getSignedUrl } from '../../../packages/adapters/cos/index.js';
+
+// WXPay 适配（mock）
 import {
   refund as requestWxpayRefund,
   verifyCallback as verifyWxpayCallback,
@@ -26,6 +27,9 @@ import {
 // Prisma（/v1/db/ping、/v1/results/save 会使用）
 import { prisma } from './db.js';
 
+// -------------------------------
+// 模板与样例简历、字体探测
+// -------------------------------
 const APP_CWD = process.cwd();
 const REPO_ROOT = (() => {
   const candidate = path.resolve(APP_CWD, '../../');
@@ -42,7 +46,6 @@ function loadSampleResume() {
     return {};
   }
 }
-
 function hasResumeShape(value) {
   if (!value || typeof value !== 'object') return false;
   return (
@@ -58,9 +61,7 @@ const fontSetup = describeFontSetup();
 if (process.env.NODE_ENV !== 'test') {
   console.log('[templates] fonts dir:', fontSetup.fontsDir);
   const missing = fontSetup.bundled.filter((f) => !f.available).map((f) => f.filename);
-  if (missing.length) {
-    console.warn('[templates] bundled fonts missing:', missing.join(', '));
-  }
+  if (missing.length) console.warn('[templates] bundled fonts missing:', missing.join(', '));
   if (fontSetup.systemHints.length) {
     console.log('[templates] detected system fonts:', fontSetup.systemHints.join(', '));
   }
@@ -143,9 +144,7 @@ app.use(createResultsRouter());
 app.use(createUsersRouter());
 
 // -------------------------------
-// 保留 main 分支的 Mock 文件服务
-// /mock/:file  -> 若存在仓库根/resumes_pdf/<file> 则返回该文件
-//               否则回一个最小 PDF 占位内容
+// Mock 文件服务（main 分支遗留能力）
 // -------------------------------
 app.get('/mock/:file', (req, res) => {
   const filename = req.params.file;
@@ -154,8 +153,7 @@ app.get('/mock/:file', (req, res) => {
     return res.sendFile(filePath);
   }
   res.setHeader('Content-Type', 'application/pdf');
-  // 一个最小可被识别的 PDF 占位
-  res.send(Buffer.from('%PDF-1.4\n% mock\n'));
+  res.send(Buffer.from('%PDF-1.4\n% mock\n')); // 最小可识别 PDF
 });
 
 // -------------------------------
@@ -179,7 +177,7 @@ app.get('/v1/templates', (req, res) => {
 });
 
 // -------------------------------
-// 渲染（mock）：读取样例 JSON -> PDF buffer -> 返回字节数
+// 渲染：resume -> HTML -> PDF
 // -------------------------------
 app.post('/v1/render/mock', async (_req, res) => {
   try {
@@ -239,15 +237,12 @@ app.post('/v1/render/pdf', async (req, res) => {
 app.post('/v1/jd/parse', (req, res) => {
   try {
     const { raw_text = '' } = req.body || {};
-    const repoRoot = path.resolve(process.cwd(), '../../');
-    const dictPath = path.join(repoRoot, 'data/jd_dict_zh.json');
+    const dictPath = path.join(REPO_ROOT, 'data/jd_dict_zh.json');
     const dict = JSON.parse(fs.readFileSync(dictPath, 'utf-8'));
     const text = String(raw_text);
 
     const hit = (list = []) => list.filter((w) => text.includes(w));
-    const keywords = Array.from(
-      new Set([...(hit(dict.skills || [])), ...(hit(dict.soft || []))])
-    );
+    const keywords = Array.from(new Set([...(hit(dict.skills || [])), ...(hit(dict.soft || []))]));
 
     const result = {
       jd_id: 'demo-' + Date.now(),
@@ -269,15 +264,14 @@ app.post('/v1/jd/parse', (req, res) => {
 // -------------------------------
 app.post('/v1/match/score', (req, res) => {
   try {
-    const repoRoot = path.resolve(process.cwd(), '../../');
-    const dictPath = path.join(repoRoot, 'data/jd_dict_zh.json');
+    const dictPath = path.join(REPO_ROOT, 'data/jd_dict_zh.json');
     const dict = JSON.parse(fs.readFileSync(dictPath, 'utf-8'));
 
     const body = req.body || {};
     // 1) 简历数据：若未传则读取样例
     let resume = body.resume;
     if (!resume) {
-      const samplePath = path.join(repoRoot, 'samples/resume/alice.json');
+      const samplePath = path.join(REPO_ROOT, 'samples/resume/alice.json');
       resume = JSON.parse(fs.readFileSync(samplePath, 'utf-8'));
     }
     const resumeSkills = new Set((resume.skills || []).map((s) => s.name));
@@ -346,19 +340,13 @@ app.post('/v1/analysis/report', (req, res) => {
 // 订单（占位）：create/status/callback
 // -------------------------------
 const MEM_ORDERS = new Map(); // key: out_trade_no -> {status, amount, plan, callbacks}
-const CALLBACK_AUDIT_LOG = path.join(
-  REPO_ROOT,
-  'data',
-  'logs',
-  'wxpay-callback-audit.log'
-);
+
+const CALLBACK_AUDIT_LOG = path.join(REPO_ROOT, 'data', 'logs', 'wxpay-callback-audit.log');
 
 function appendCallbackAudit(event) {
   try {
     const dir = path.dirname(CALLBACK_AUDIT_LOG);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const line = `${new Date().toISOString()} ${JSON.stringify(event)}\n`;
     fs.appendFileSync(CALLBACK_AUDIT_LOG, line, 'utf8');
   } catch (err) {
@@ -377,31 +365,25 @@ function resolveCallbackStatus(payload = {}) {
     'UNKNOWN'
   );
 }
-
 function normaliseStatusKey(status) {
   if (!status) return 'UNKNOWN';
   return String(status).trim().toUpperCase();
 }
-
 function resolveCallbackAmount(payload = {}) {
   const fromResource = payload?.resource?.amount;
   if (fromResource && typeof fromResource === 'object') {
     if (typeof fromResource.total === 'number') return fromResource.total;
     if (typeof fromResource.payer_total === 'number') return fromResource.payer_total;
   }
-
   const amount = payload?.amount;
   if (typeof amount === 'number') return amount;
   if (amount && typeof amount === 'object') {
     if (typeof amount.total === 'number') return amount.total;
     if (typeof amount.payer_total === 'number') return amount.payer_total;
   }
-
   if (typeof payload?.total === 'number') return payload.total;
-
   return undefined;
 }
-
 function genOutTradeNo() {
   const t = Date.now().toString();
   return 'ORD' + t.slice(-8) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
@@ -449,6 +431,8 @@ app.get('/v1/order/status', (req, res) => {
 app.post('/v1/order/callback', async (req, res) => {
   try {
     const requestId = req.requestId || req.id;
+
+    // 1) 验签（mock 可配置允许签名）
     let verified;
     try {
       verified = await verifyWxpayCallback(req.headers, req.body);
@@ -460,43 +444,28 @@ app.post('/v1/order/callback', async (req, res) => {
         message: err?.message || 'invalid signature',
         reqid: requestId,
       });
-      return res
-        .status(statusCode)
-        .json({ code: statusCode, msg: 'invalid callback signature' });
+      return res.status(statusCode).json({ code: statusCode, msg: 'invalid callback signature' });
     }
 
+    // 2) 取单
     const payload = req.body || {};
     const out_trade_no = verified.out_trade_no || payload.out_trade_no;
     if (!out_trade_no) {
-      appendCallbackAudit({
-        type: 'payload_invalid',
-        statusCode: 400,
-        message: 'missing out_trade_no',
-        reqid: requestId,
-      });
+      appendCallbackAudit({ type: 'payload_invalid', statusCode: 400, message: 'missing out_trade_no', reqid: requestId });
       return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
     }
-
     const order = MEM_ORDERS.get(out_trade_no);
     if (!order) {
-      appendCallbackAudit({
-        type: 'order_not_found',
-        out_trade_no,
-        statusCode: 404,
-        reqid: requestId,
-      });
+      appendCallbackAudit({ type: 'order_not_found', out_trade_no, statusCode: 404, reqid: requestId });
       return res.status(404).json({ code: 404, msg: 'order not found' });
     }
 
+    // 3) 幂等（out_trade_no + status）
     const statusRaw = resolveCallbackStatus(payload);
     const statusKey = normaliseStatusKey(statusRaw);
     const callbacks = order.callbacks || { total: 0, statuses: {} };
     callbacks.total = (callbacks.total || 0) + 1;
-    const record = callbacks.statuses[statusKey] || {
-      count: 0,
-      processed: false,
-      last_received_at: null,
-    };
+    const record = callbacks.statuses[statusKey] || { count: 0, processed: false, last_received_at: null };
     record.count += 1;
     record.last_received_at = Date.now();
     callbacks.statuses[statusKey] = record;
@@ -505,10 +474,7 @@ app.post('/v1/order/callback', async (req, res) => {
     if (!record.processed) {
       if (statusKey.includes('SUCCESS')) {
         const amount = resolveCallbackAmount(payload);
-        if (
-          amount != null &&
-          Number(amount) !== Number(order.amount)
-        ) {
+        if (amount != null && Number(amount) !== Number(order.amount)) {
           appendCallbackAudit({
             type: 'amount_mismatch',
             out_trade_no,
@@ -552,15 +518,14 @@ app.post('/v1/order/callback', async (req, res) => {
       },
     });
   } catch (e) {
-    appendCallbackAudit({
-      type: 'callback_internal_error',
-      message: e?.message || 'internal error',
-      reqid: req.requestId || req.id,
-    });
+    appendCallbackAudit({ type: 'callback_internal_error', message: e?.message || 'internal error', reqid: req.requestId || req.id });
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
   }
 });
 
+// -------------------------------
+// 退款（admin-only，经 JWT 校验）
+// -------------------------------
 app.post('/v1/order/refund', jwtMiddleware, async (req, res) => {
   try {
     if (!req.user || req.user.role !== 'admin') {

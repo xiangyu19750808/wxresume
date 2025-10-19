@@ -588,22 +588,7 @@
     },
     "/v1/render/pdf": {
       "post": {
-        "summary": "Render resume data into PDF using template library",
-        "parameters": [
-          {
-            "name": "templateId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "default": "classic",
-              "enum": [
-                "classic",
-                "modern"
-              ]
-            },
-            "description": "Template identifier (classic | modern)"
-          }
-        ],
+        "summary": "Render resume JSON via template to PDF",
         "requestBody": {
           "required": false,
           "content": {
@@ -612,33 +597,19 @@
                 "type": "object",
                 "properties": {
                   "templateId": {
-                    "type": "string",
-                    "description": "Template identifier when not using query parameter"
+                    "type": "string"
                   },
                   "resume": {
-                    "type": "object",
-                    "description": "JSON Resume payload"
+                    "type": "object"
                   }
-                },
-                "additionalProperties": true
+                }
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "PDF binary",
-            "content": {
-              "application/pdf": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "invalid template id"
+            "description": "ok"
           }
         }
       }
