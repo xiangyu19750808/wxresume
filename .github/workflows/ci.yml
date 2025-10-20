@@ -25,25 +25,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: pnpm
 
-      - name: Setup pnpm (Corepack)
-        run: |
-          corepack enable
-          corepack prepare pnpm@8.15.7 --activate
-          pnpm -v
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.7
+          run_install: false
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      # 各包若有 script 就执行；没有就跳过，不会失败
       - name: Build
         run: pnpm -r --if-present build
 
