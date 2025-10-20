@@ -1,37 +1,40 @@
-name: ci
+# .github/workflows/ci.yml
+name: build
 
 on:
   pull_request:
     branches: [ main ]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/ci.yml"
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [ main ]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      CI: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'pnpm'
 
-      - name: Setup pnpm via corepack
+      - name: Setup pnpm (Corepack)
         run: |
           corepack enable
           corepack prepare pnpm@8.15.7 --activate
@@ -40,6 +43,9 @@ jobs:
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      # 关键：只构建 API 包，避免其它包无 build 脚本导致失败
-      - name: Build API only
-        run: pnpm --filter @wxresume/api build
+      # 各包若有 script 就执行；没有就跳过，不会失败
+      - name: Build
+        run: pnpm -r --if-present build
+
+      - name: Test
+        run: pnpm -r --if-present test

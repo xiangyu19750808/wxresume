@@ -1,7 +1,7 @@
+# .github/workflows/api-check.yml
 name: api-check
 
 on:
-  workflow_dispatch:
   pull_request:
     branches: [ main ]
     paths:
@@ -9,7 +9,6 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/api-check.yml'
-
   push:
     branches: [ main ]
     paths:
@@ -17,6 +16,14 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/api-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-check-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   api-check:
@@ -25,21 +32,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'pnpm'
 
-      - name: Setup pnpm
+      - name: Setup pnpm (Corepack)
         run: |
           corepack enable
           corepack prepare pnpm@8.15.7 --activate
           pnpm -v
 
-  
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
+      # 有哪个包里定义就会在哪个包里执行；没定义也不会报错
       - name: Lint OpenAPI
-        run: pnpm api:openapi:lint
+        run: pnpm -r --if-present api:openapi:lint
+
+      - name: Lint (optional)
+        run: pnpm -r --if-present lint
