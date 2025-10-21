@@ -27,16 +27,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
 
-      - name: Install pnpm globally
+      - name: Install pnpm
         run: |
           npm install -g pnpm
-          pnpm -v  # Verify pnpm installation
+          pnpm -v  # Verify that pnpm is installed successfully
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
