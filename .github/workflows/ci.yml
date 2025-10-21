@@ -24,25 +24,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
+        with: 
           fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
 
-      - name: Install pnpm            # ← 关键新增
+      - name: Install pnpm
         run: |
-          npm i -g pnpm@8.15.7
-          pnpm -v
+          npm install -g pnpm
+          pnpm -v # 输出 pnpm 版本来确认安装成功
 
-      - name: Install deps
+      - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build
+      - name: Build project
         run: pnpm -r --if-present build
 
-      - name: Test
+      - name: Test project
         run: pnpm -r --if-present test
