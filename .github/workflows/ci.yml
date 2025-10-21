@@ -1,3 +1,4 @@
+# .github/workflows/ci.yml
 name: build
 
 on:
@@ -27,22 +28,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
 
+      # 关键：**明确安装 pnpm 到 PATH**
       - name: Install pnpm
         run: |
-          npm install -g pnpm
-          pnpm -v  # Verify that pnpm is installed successfully
+          npm i -g pnpm@8.15.7
+          pnpm -v
 
-      - name: Install dependencies
+      - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build project
+      - name: Build
         run: pnpm -r --if-present build
 
-      - name: Run tests
+      - name: Test
         run: pnpm -r --if-present test
