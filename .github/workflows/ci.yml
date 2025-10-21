@@ -33,16 +33,16 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - name: Install pnpm
+      - name: Install pnpm globally
         run: |
           npm install -g pnpm
-          pnpm -v
+          pnpm -v  # Verify pnpm installation
 
-      - name: Install deps
+      - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build
+      - name: Build project
         run: pnpm -r --if-present build
 
-      - name: Test
+      - name: Run tests
         run: pnpm -r --if-present test
