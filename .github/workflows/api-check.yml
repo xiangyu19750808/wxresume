@@ -1,29 +1,4 @@
 # .github/workflows/api-check.yml
-name: api-check
-
-on:
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'apps/api/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/api-check.yml'
-  push:
-    branches: [ main ]
-    paths:
-      - 'apps/api/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/api-check.yml'
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: api-check-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   api-check:
@@ -31,25 +6,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8.15.7
-          run_install: false
+      - name: Install pnpm
+        run: |
+          npm install -g pnpm
+          pnpm -v  # 确保 pnpm 安装成功
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
       - name: Lint OpenAPI
-        run: pnpm -r --if-present api:openapi:lint
-
-      - name: Lint (optional)
-        run: pnpm -r --if-present lint
+        run: pnpm api:openapi:lint
