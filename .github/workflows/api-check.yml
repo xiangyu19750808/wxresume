@@ -19,7 +19,6 @@ concurrency:
 jobs:
   api-check:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,22 +29,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
 
-      # 关键：用官方 action 安装指定版本 pnpm，最稳
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8.15.7
-          run_install: false
+      # 关键：可靠地装上 pnpm（不用依赖 cache）
+      - name: Install pnpm
+        run: |
+          npm i -g pnpm@8.15.7
+          pnpm -v
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      # 如果 openapi 的校验脚本在根 package.json，就保留这一条；
-      # 如果脚本在 apps/api 里，请改成下面那条（已注释）的形式。
+      # 如果脚本在根 package.json
       - name: Lint OpenAPI
         run: pnpm -r --if-present api:openapi:lint
+
+      # 如果脚本在 apps/api 才改用下面两行（把上面那步注释掉）
       # - name: Lint OpenAPI (apps/api)
       #   working-directory: apps/api
       #   run: pnpm --if-present api:openapi:lint
