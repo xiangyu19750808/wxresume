@@ -32,7 +32,6 @@ jobs:
         with:
           node-version: 20
 
-      # 安装 pnpm（保证后续命令可用）
       - name: Install pnpm
         run: |
           npm i -g pnpm
@@ -41,25 +40,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      # ！！！关键：生成 Prisma Client（在 apps/api 目录执行）
-      - name: Prisma generate
+      # === 关键：给 Prisma 提供 DB_URL（与你的 schema 一致）===
+      - name: Prisma generate & push
         working-directory: apps/api
         env:
-          # 用 SQLite，文件将生成在 apps/api/dev.db
-          DATABASE_URL: file:./dev.db
+          DB_URL: file:./dev.db
         run: |
           npx prisma generate
-          # 同步 schema -> DB（避免测试用到的表不存在）
           npx prisma db push
 
-      # 如果你的接口/中间件需要 JWT_SECRET，给测试环境一个值避免报错
       - name: Prepare test env
         run: echo "JWT_SECRET=dev-secret-please-change" >> $GITHUB_ENV
 
-      # 构建（有的包可能没有 build 脚本，所以加 --if-present）
       - name: Build packages
         run: pnpm -r --if-present build
 
-      # 单测（递归执行，只有存在 test 脚本的包才会跑）
       - name: Test packages
         run: pnpm -r --if-present test
