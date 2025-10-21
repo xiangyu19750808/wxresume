@@ -1,11 +1,13 @@
+# .github/workflows/api-check.yml
 name: api-check
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [ main ]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [ main ]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,7 +32,7 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      # 关键：安装 pnpm（仅缓存不会安装）
+      # 关键：用官方 action 安装指定版本 pnpm，最稳
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -40,8 +42,13 @@ jobs:
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
+      # 如果 openapi 的校验脚本在根 package.json，就保留这一条；
+      # 如果脚本在 apps/api 里，请改成下面那条（已注释）的形式。
       - name: Lint OpenAPI
         run: pnpm -r --if-present api:openapi:lint
+      # - name: Lint OpenAPI (apps/api)
+      #   working-directory: apps/api
+      #   run: pnpm --if-present api:openapi:lint
 
       - name: Lint (optional)
         run: pnpm -r --if-present lint
