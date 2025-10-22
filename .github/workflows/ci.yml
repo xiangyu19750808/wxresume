@@ -32,9 +32,10 @@ jobs:
         with:
           node-version: 20
 
+      # 安装 pnpm（关键）
       - name: Install pnpm
         run: |
-          npm i -g pnpm
+          npm install -g pnpm
           pnpm -v
 
       - name: Install dependencies
