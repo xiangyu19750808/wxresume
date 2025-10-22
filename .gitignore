@@ -9,6 +9,7 @@ apps/api/dev.db
 
 # local sqlite db
 apps/api/prisma/dev.db
+apps/api/prisma/prisma/
 !apps/api/.env.example
 
 
