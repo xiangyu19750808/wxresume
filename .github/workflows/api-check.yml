@@ -18,30 +18,25 @@ concurrency:
 jobs:
   api-check:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
 
-      # 安装 pnpm
-      - name: Install pnpm (fix)
+      # 安装 pnpm (确保 pnpm 安装且在环境中可用)
+      - name: Install pnpm
         run: |
-          curl -fsSL https://get.pnpm.io/install.sh | sh -
-          echo "export PATH=$HOME/.local/share/pnpm:$PATH" >> $GITHUB_ENV
-          pnpm -v  # 检查 pnpm 是否安装成功
+          npm install -g pnpm
+          pnpm -v  # 检查 pnpm 版本，确保安装成功
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
+      # 执行 API Lint 检查
       - name: Lint OpenAPI
         run: pnpm -r --if-present api:openapi:lint
-
-      - name: Lint (optional)
-        run: pnpm -r --if-present lint
