@@ -70,3 +70,7 @@ jobs:
       # ✅ 运行测试（Node 原生测试 + pretest.mjs）
       - name: Run tests
         run: pnpm test
+
+      # ✅ 运行 api-check 校验
+      - name: Lint OpenAPI
+        run: pnpm -r --if-present api:openapi:lint
