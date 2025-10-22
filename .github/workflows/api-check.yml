@@ -21,8 +21,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -30,23 +29,16 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      # 关键：可靠地装上 pnpm（不用依赖 cache）
       - name: Install pnpm
         run: |
-          npm i -g pnpm@8.15.7
+          npm install -g pnpm
           pnpm -v
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      # 如果脚本在根 package.json
       - name: Lint OpenAPI
         run: pnpm -r --if-present api:openapi:lint
-
-      # 如果脚本在 apps/api 才改用下面两行（把上面那步注释掉）
-      # - name: Lint OpenAPI (apps/api)
-      #   working-directory: apps/api
-      #   run: pnpm --if-present api:openapi:lint
 
       - name: Lint (optional)
         run: pnpm -r --if-present lint
