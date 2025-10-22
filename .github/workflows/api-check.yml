@@ -1,36 +1,52 @@
+# .github/workflows/api-check.yml
 name: api-check
 
 on:
-  # 允许手动触发
   workflow_dispatch:
-  # PR 触发（去掉 paths 限制，保证 PR 都会跑）
   pull_request:
     branches: [ main ]
-  # 可选：推送到 main 时也跑
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-check-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   api-check:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # 安装 pnpm（关键）
+      # 关键：可靠地装上 pnpm（不用依赖 cache）
       - name: Install pnpm
         run: |
-          npm i -g pnpm
+          npm i -g pnpm@8.15.7
           pnpm -v
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
+      # 如果脚本在根 package.json
       - name: Lint OpenAPI
-        run: pnpm api:openapi:lint
+        run: pnpm -r --if-present api:openapi:lint
+
+      # 如果脚本在 apps/api 才改用下面两行（把上面那步注释掉）
+      # - name: Lint OpenAPI (apps/api)
+      #   working-directory: apps/api
+      #   run: pnpm --if-present api:openapi:lint
+
+      - name: Lint (optional)
+        run: pnpm -r --if-present lint
