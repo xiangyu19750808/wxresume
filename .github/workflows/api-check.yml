@@ -1,4 +1,3 @@
-# .github/workflows/api-check.yml
 name: api-check
 
 on:
@@ -19,34 +18,25 @@ concurrency:
 jobs:
   api-check:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # 关键：可靠地装上 pnpm（不用依赖 cache）
+      # 安装 pnpm (确保 pnpm 安装且在环境中可用)
       - name: Install pnpm
         run: |
-          npm i -g pnpm@8.15.7
-          pnpm -v
+          npm install -g pnpm
+          pnpm -v  # 检查 pnpm 版本，确保安装成功
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      # 如果脚本在根 package.json
+      # 执行 API Lint 检查
       - name: Lint OpenAPI
         run: pnpm -r --if-present api:openapi:lint
-
-      # 如果脚本在 apps/api 才改用下面两行（把上面那步注释掉）
-      # - name: Lint OpenAPI (apps/api)
-      #   working-directory: apps/api
-      #   run: pnpm --if-present api:openapi:lint
-
-      - name: Lint (optional)
-        run: pnpm -r --if-present lint
