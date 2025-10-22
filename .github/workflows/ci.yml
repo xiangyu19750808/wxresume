@@ -32,11 +32,11 @@ jobs:
         with:
           node-version: 20
 
-      # 安装 pnpm（关键）
-      - name: Install pnpm
-        run: |
-          npm install -g pnpm
-          pnpm -v
+      # 安装 pnpm
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.7
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
