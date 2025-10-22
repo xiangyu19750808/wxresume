@@ -1,4 +1,4 @@
-name: build
+name: ci
 
 on:
   pull_request:
@@ -12,50 +12,53 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  checks:
     runs-on: ubuntu-latest
     env:
       CI: true
+      DB_URL: file:./prisma/dev.db
+      JWT_SECRET: dev-secret-please-change
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
 
-      # 安装 pnpm
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 8.15.7
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
-      # Prisma：与 schema 中的 env("DB_URL") 保持一致
-      - name: Prisma generate & push
-        working-directory: apps/api
-        env:
-          DB_URL: file:./dev.db
-        run: |
-          npx prisma generate
-          npx prisma db push
+      - name: Generate Prisma client
+        run: pnpm --filter @wxresume/api exec prisma generate --schema prisma/schema.prisma
 
-      - name: Prepare runtime env
-        run: echo "JWT_SECRET=dev-secret-please-change" >> $GITHUB_ENV
+      - name: Apply Prisma schema
+        run: pnpm --filter @wxresume/api exec prisma db push --schema prisma/schema.prisma --skip-generate
 
-      - name: Build packages
-        run: pnpm -r --if-present build
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install chromium
 
-      # ⚠️ 先不跑测试（避免红灯），需要时再打开
-      # - name: Test packages
-      #   run: pnpm -r --if-present test
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: End-to-end tests
+        run: pnpm test:e2e
+
+      - name: OpenAPI lint
+        run: pnpm api:openapi:lint

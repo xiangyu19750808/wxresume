@@ -5,8 +5,12 @@
   "type": "module",
   "packageManager": "pnpm@8.15.7",
   "scripts": {
-    "api:openapi:lint": "echo skip api-check && exit 0",
-    "dev": "pnpm -C apps/api dev"
+    "api:openapi:lint": "node ./scripts/check-openapi.mjs",
+    "dev": "pnpm -C apps/api dev",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm test:unit",
+    "test:unit": "pnpm --filter @wxresume/api test",
+    "test:e2e": "./scripts/test-e2e.sh"
   },
   "workspaces": [
     "apps/*",
