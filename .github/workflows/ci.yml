@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,12 +36,11 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
-      # ✅ 关键修正：全局安装 pnpm 并显式加入 PATH
-      - name: Install pnpm
-        run: |
-          npm install -g pnpm
-          echo "$(npm root -g)/.bin" >> $GITHUB_PATH
-          pnpm -v
+      # ✅ 和 build.yml 一样：使用官方 pnpm/action-setup
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.7   # ← 保持和 build.yml 一致，稳定可用
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
