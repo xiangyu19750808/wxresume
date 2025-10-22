@@ -34,31 +34,40 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Install pnpm
-        run: |
-          npm install -g pnpm
-          pnpm --version  # Confirm pnpm is installed and available
-          
+      # ✅ 关键修正：使用官方 pnpm/action-setup，而不是 npm install -g
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9 # 建议与项目中 pnpm-lock.yaml 对应的版本一致
+
+      # ✅ 安装依赖
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # ✅ 生成 Prisma Client
       - name: Generate Prisma client
         run: pnpm --filter @wxresume/api exec prisma generate --schema prisma/schema.prisma
 
+      # ✅ 应用 Prisma Schema
       - name: Apply Prisma schema
         run: pnpm --filter @wxresume/api exec prisma db push --schema prisma/schema.prisma --skip-generate
 
+      # ✅ 安装 Playwright 浏览器
       - name: Install Playwright browsers
         run: pnpm exec playwright install chromium
 
+      # ✅ Lint 检查
       - name: Lint
         run: pnpm lint
 
+      # ✅ 单元测试
       - name: Unit tests
         run: pnpm test:unit
 
+      # ✅ 端到端测试
       - name: End-to-end tests
         run: pnpm test:e2e
 
+      # ✅ OpenAPI 规范检查
       - name: OpenAPI lint
         run: pnpm api:openapi:lint
