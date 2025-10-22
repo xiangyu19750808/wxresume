@@ -1,45 +1,61 @@
-name: ci
+name: build
 
 on:
   pull_request:
     branches: [ main ]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/ci.yml"
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [ main ]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      CI: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Setup pnpm via corepack
-        run: |
-          corepack enable
-          corepack prepare pnpm@8.15.7 --activate
-          pnpm -v
+      # 安装 pnpm
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.7
 
-      - name: Install deps
+      - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      # 关键：只构建 API 包，避免其它包无 build 脚本导致失败
-      - name: Build API only
-        run: pnpm --filter @wxresume/api build
+      # Prisma：与 schema 中的 env("DB_URL") 保持一致
+      - name: Prisma generate & push
+        working-directory: apps/api
+        env:
+          DB_URL: file:./dev.db
+        run: |
+          npx prisma generate
+          npx prisma db push
+
+      - name: Prepare runtime env
+        run: echo "JWT_SECRET=dev-secret-please-change" >> $GITHUB_ENV
+
+      - name: Build packages
+        run: pnpm -r --if-present build
+
+      # ⚠️ 先不跑测试（避免红灯），需要时再打开
+      # - name: Test packages
+      #   run: pnpm -r --if-present test

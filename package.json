@@ -4,13 +4,15 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@8.15.7",
-  "scripts": { "api:openapi:lint": "echo skip api-check && exit 0",
+  "scripts": {
+    "api:openapi:lint": "echo skip api-check && exit 0",
     "dev": "pnpm -C apps/api dev"
   },
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "dotenv": "^17.2.3"
+  }
 }
-
-
