@@ -35,7 +35,9 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install pnpm
-        run: npm install -g pnpm
+        run: |
+          npm install -g pnpm
+          pnpm --version  # Ensure pnpm is installed and available
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
