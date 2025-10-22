@@ -62,3 +62,9 @@ jobs:
 
       - name: OpenAPI lint
         run: pnpm api:openapi:lint
+
+      - name: Run api-check
+        run: pnpm run api-check
+
+      - name: Run build
+        run: pnpm run build
