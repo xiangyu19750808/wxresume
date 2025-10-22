@@ -34,10 +34,10 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Install pnpm
+      - name: Install pnpm (Force Installation)
         run: |
           curl -fsSL https://get.pnpm.io/install.sh | sh -
-          echo "pnpm version: $(pnpm -v)" # Verify pnpm installation
+          echo "pnpm installed version: $(pnpm -v)" # Check pnpm version
 
       - name: Install dependencies
         run: |
