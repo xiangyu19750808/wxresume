@@ -34,12 +34,12 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
-      # ✅ 关键修改：直接安装 pnpm 并验证路径
-      - name: Install pnpm manually
+      # ✅ 关键修正：全局安装 pnpm 并显式加入 PATH
+      - name: Install pnpm
         run: |
-          corepack enable
-          corepack prepare pnpm@9.12.3 --activate
-          pnpm --version
+          npm install -g pnpm
+          echo "$(npm root -g)/.bin" >> $GITHUB_PATH
+          pnpm -v
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
