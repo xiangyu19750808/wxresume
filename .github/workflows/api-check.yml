@@ -30,10 +30,12 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - name: Install pnpm
+      # 安装 pnpm
+      - name: Install pnpm (fix)
         run: |
           curl -fsSL https://get.pnpm.io/install.sh | sh -
-          pnpm -v
+          echo "export PATH=$HOME/.local/share/pnpm:$PATH" >> $GITHUB_ENV
+          pnpm -v  # 检查 pnpm 是否安装成功
 
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
