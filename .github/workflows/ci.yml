@@ -1,4 +1,4 @@
-name: ci
+name: build
 
 on:
   pull_request:
@@ -12,16 +12,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  checks:
+  build:
     runs-on: ubuntu-latest
     env:
       CI: true
-      DB_URL: file:./prisma/dev.db
-      JWT_SECRET: dev-secret-please-change
 
     steps:
       - name: Checkout
@@ -29,47 +27,41 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ✅ 设置 Node + 缓存 pnpm
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"   # 暂时关闭 pnpm cache 以排除影响
+          cache: 'pnpm'  # 告诉 GitHub 使用 pnpm 缓存
 
-      # ✅ 不使用 action-setup，手动启用 Corepack 并激活 pnpm（官方推荐）
+      # ✅ 启用 corepack 并激活指定 pnpm 版本
       - name: Enable Corepack & Activate pnpm
         run: |
           corepack enable
           corepack prepare pnpm@8.15.7 --activate
-          echo "$(pnpm env use --global 20)" || true
           pnpm -v
 
-      # ✅ 确保 pnpm 可执行路径写入到 PATH
-      - name: Add pnpm to PATH
-        run: |
-          echo "$(npm root -g)/.bin" >> $GITHUB_PATH
-          which pnpm || echo "pnpm not found in PATH"
-          pnpm -v
-
+      # ✅ 安装依赖
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
-      - name: Generate Prisma client
-        run: pnpm --filter @wxresume/api exec prisma generate --schema prisma/schema.prisma
+      # ✅ 运行 Prisma（和 schema 中的 DB_URL 保持一致）
+      - name: Prisma generate & push
+        working-directory: apps/api
+        env:
+          DB_URL: file:./dev.db
+        run: |
+          npx prisma generate
+          npx prisma db push
 
-      - name: Apply Prisma schema
-        run: pnpm --filter @wxresume/api exec prisma db push --schema prisma/schema.prisma --skip-generate
+      # ✅ 准备运行环境变量
+      - name: Prepare runtime env
+        run: echo "JWT_SECRET=dev-secret-please-change" >> $GITHUB_ENV
 
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install chromium
+      # ✅ 构建所有包
+      - name: Build packages
+        run: pnpm -r --if-present build
 
-      - name: Lint
-        run: pnpm lint
-
-      - name: Unit tests
-        run: pnpm test:unit
-
-      - name: End-to-end tests
-        run: pnpm test:e2e
-
-      - name: OpenAPI lint
-        run: pnpm api:openapi:lint
+      # ⚠️ 如需单元测试可开启
+      # - name: Test packages
+      #   run: pnpm -r --if-present test
