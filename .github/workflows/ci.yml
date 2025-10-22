@@ -37,34 +37,55 @@ jobs:
       - name: Install pnpm
         run: |
           curl -fsSL https://get.pnpm.io/install.sh | sh -
-          echo "pnpm version: $(pnpm -v)" # Verify installation
+          echo "pnpm version: $(pnpm -v)" # Verify pnpm installation
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          echo "Installing dependencies"
+          pnpm install --frozen-lockfile
+          echo "Dependencies installed"
 
       - name: Generate Prisma client
-        run: pnpm --filter @wxresume/api exec prisma generate --schema prisma/schema.prisma
+        run: |
+          echo "Generating Prisma client"
+          pnpm --filter @wxresume/api exec prisma generate --schema prisma/schema.prisma
 
       - name: Apply Prisma schema
-        run: pnpm --filter @wxresume/api exec prisma db push --schema prisma/schema.prisma --skip-generate
+        run: |
+          echo "Applying Prisma schema"
+          pnpm --filter @wxresume/api exec prisma db push --schema prisma/schema.prisma --skip-generate
 
       - name: Install Playwright browsers
-        run: pnpm exec playwright install chromium
+        run: |
+          echo "Installing Playwright browsers"
+          pnpm exec playwright install chromium
 
       - name: Lint
-        run: pnpm lint
+        run: |
+          echo "Running lint"
+          pnpm lint
 
       - name: Unit tests
-        run: pnpm test:unit
+        run: |
+          echo "Running unit tests"
+          pnpm test:unit
 
       - name: End-to-end tests
-        run: pnpm test:e2e
+        run: |
+          echo "Running end-to-end tests"
+          pnpm test:e2e
 
       - name: OpenAPI lint
-        run: pnpm api:openapi:lint
+        run: |
+          echo "Running OpenAPI lint"
+          pnpm api:openapi:lint
 
       - name: Run api-check
-        run: pnpm run api-check
+        run: |
+          echo "Running api-check"
+          pnpm run api-check
 
       - name: Run build
-        run: pnpm run build
+        run: |
+          echo "Running build"
+          pnpm run build
