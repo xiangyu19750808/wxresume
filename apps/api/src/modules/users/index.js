@@ -13,10 +13,17 @@ function ok(res, data) {
   return res.status(200).json({ code: 0, msg: 'ok', data, ...(rid ? { requestId: rid } : {}) });
 }
 
-function fail(res, status, msg) {
-  if (typeof res.fail === 'function') return res.fail(status, msg);
+function fail(res, status, msg, extra) {
+  if (typeof res.fail === 'function') return res.fail(status, msg, extra);
   const rid = res.req?.requestId;
-  return res.status(status).json({ code: status, msg, data: null, ...(rid ? { requestId: rid } : {}) });
+  const payload = { code: status, msg };
+  if (extra !== undefined) {
+    payload.data = extra;
+  }
+  if (rid) {
+    payload.requestId = rid;
+  }
+  return res.status(status).json(payload);
 }
 
 function signToken({ id, role = 'user' }) {

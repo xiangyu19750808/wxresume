@@ -22,26 +22,35 @@ jobs:
       CI: true
 
     steps:
+      # ✅ 拉取代码
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      # 安装 pnpm
+      # ✅ 安装 pnpm（最关键一步）
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 8.15.7
+          run_install: false
 
+      # ✅ 设置 Node.js 并缓存 pnpm 依赖
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      # ✅ 验证 pnpm 是否安装成功
+      - name: Verify pnpm
+        run: pnpm -v
+
+      # ✅ 安装依赖
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      # Prisma：与 schema 中的 env("DB_URL") 保持一致
+      # ✅ Prisma generate & push
       - name: Prisma generate & push
         working-directory: apps/api
         env:
@@ -50,12 +59,18 @@ jobs:
           npx prisma generate
           npx prisma db push
 
+      # ✅ 设置运行环境变量
       - name: Prepare runtime env
         run: echo "JWT_SECRET=dev-secret-please-change" >> $GITHUB_ENV
 
+      # ✅ 构建项目
       - name: Build packages
         run: pnpm -r --if-present build
 
-      # ⚠️ 先不跑测试（避免红灯），需要时再打开
-      # - name: Test packages
-      #   run: pnpm -r --if-present test
+      # ✅ 运行测试（Node 原生测试 + pretest.mjs）
+      - name: Run tests
+        run: pnpm test
+
+      # ✅ 运行 api-check 校验
+      - name: Lint OpenAPI
+        run: pnpm -r --if-present api:openapi:lint
