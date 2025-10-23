@@ -1,4 +1,8 @@
-﻿let prisma;
+if (!process.env.DB_URL) {
+  process.env.DB_URL = 'file:./prisma/dev.db';
+}
+
+let prisma;
 
 if (process.env.E2E_LIGHT) {
   // 轻量模式：提供最小假的 Prisma 接口，避免在 CI 里跑 prisma generate

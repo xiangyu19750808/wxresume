@@ -1,5 +1,6 @@
 services:
   api:
+    image: ${API_IMAGE:-ghcr.io/wxresume/wxresume-api:latest}
     build:
       context: .
       dockerfile: apps/api/Dockerfile
