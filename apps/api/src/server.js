@@ -46,6 +46,7 @@ function loadSampleResume() {
     return {};
   }
 }
+
 function hasResumeShape(value) {
   if (!value || typeof value !== 'object') return false;
   return (
@@ -95,7 +96,6 @@ app.use('/files', express.static(filesDirectory, {
   fallthrough: false,  // 如果文件不存在，直接返回 404 错误
   dotfiles: 'deny'     // 禁止访问以 "." 开头的文件
 }));
-
 
 // 根路径路由
 app.get('/', (req, res) => {
@@ -172,19 +172,6 @@ app.post('/v1/order/create', (req, res) => {
 });
 
 // -------------------------------
-// 新增 /v1/db/ping 接口：数据库连接检查
-// -------------------------------
-app.get('/v1/db/ping', async (req, res) => {
-  try {
-    // 简单的数据库连接检查，使用 Prisma 查询数据库
-    await prisma.$queryRaw`SELECT 1`;
-    res.json({ status: 'ok' });
-  } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
-  }
-});
-
-// -------------------------------
 // 新增 /v1/order/callback 路由
 // -------------------------------
 app.post('/v1/order/callback', (req, res) => {
@@ -200,45 +187,24 @@ app.post('/v1/order/callback', (req, res) => {
 });
 
 // -------------------------------
-// 新增 /v1/render/pdf 路由（PDF 渲染功能）
+// 新增 /v1/db/ping 接口：数据库连接检查
 // -------------------------------
-app.post('/v1/render/pdf', (req, res) => {
-  const { html } = req.body;
-
-  if (!html) {
-    return res.status(400).json({ code: 400, msg: 'Missing HTML content' });
-  }
-
-  // 假设使用 Playwright 渲染 PDF
-  htmlToPDFBuffer(html)
-    .then(pdfBuffer => {
-      res.setHeader('Content-Type', 'application/pdf');
-      res.send(pdfBuffer);
-    })
-    .catch(err => {
-      res.status(500).json({ code: 500, msg: err.message || 'PDF rendering error' });
-    });
-});
-
-// -------------------------------
-// 新增 /v1/file/download 路由（文件下载功能）
-// -------------------------------
-app.get('/v1/file/download', (req, res) => {
-  const { file_id } = req.query;
-
-  if (!file_id) {
-    return res.status(400).json({ code: 400, msg: 'Missing file_id' });
-  }
-
-  const filePath = path.join(process.cwd(), 'files', file_id);  // 根据文件路径和存储位置调整
-  console.log(`Requesting file: ${filePath}`);  // 打印请求的文件路径
-
-  if (fs.existsSync(filePath)) {
-    return res.sendFile(filePath);
-  } else {
-    return res.status(404).json({ code: 404, msg: 'File not found' });
+app.get('/v1/db/ping', async (req, res) => {
+  try {
+    // 简单的数据库连接检查，使用 Prisma 查询数据库
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok' });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
   }
 });
+
+// -------------------------------
+// 路由挂载（保持顺序）
+// -------------------------------
+app.use(createFileRouter());
+app.use(createResultsRouter());
+app.use(createUsersRouter());
 
 // -------------------------------
 // 生成分析报告
@@ -294,6 +260,139 @@ app.get('/v1/templates', (req, res) => {
   try {
     const templates = listTemplates();
     res.json({ code: 0, data: templates });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || 'error' });
+  }
+});
+
+// -------------------------------
+// 渲染：resume -> HTML -> PDF
+// -------------------------------
+app.post('/v1/render/mock', async (_req, res) => {
+  try {
+    const resume = loadSampleResume();
+    const { html, metadata } = await renderResumeHTML(resume, 'classic');
+    const buf = await htmlToPDFBuffer(html);
+    res.json({ code: 0, data: { bytes: buf.length, templateId: metadata?.templateId || 'classic' } });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || 'error' });
+  }
+});
+
+app.post('/v1/render/pdf', async (req, res) => {
+  try {
+    const queryTemplate = req.query.templateId || req.query.template_id;
+    const body = req.body || {};
+    const bodyTemplate = body.templateId || body.template_id;
+    const templateId = String(queryTemplate || bodyTemplate || 'classic');
+
+    let resumePayload = {};
+    if (hasResumeShape(body.resume)) {
+      resumePayload = body.resume;
+    } else if (hasResumeShape(body)) {
+      const { templateId: _t, template_id: _tid, ...rest } = body;
+      resumePayload = rest;
+    } else {
+      resumePayload = loadSampleResume();
+    }
+
+    let rendered;
+    try {
+      rendered = await renderResumeHTML(resumePayload, templateId);
+    } catch (err) {
+      if (err?.message?.includes('Unknown template')) {
+        return res.status(400).json({ code: 400, msg: err.message });
+      }
+      throw err;
+    }
+
+    const pdf = await htmlToPDFBuffer(rendered.html);
+    if (rendered.metadata?.fontWarnings?.length) {
+      res.setHeader('X-Render-Font-Warnings', rendered.metadata.fontWarnings.join('; '));
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', String(pdf.length));
+    res.setHeader('Content-Disposition', `inline; filename="resume-${rendered.metadata?.templateId || templateId}.pdf"`);
+    res.setHeader('X-Template-Id', rendered.metadata?.templateId || templateId);
+    res.send(pdf);
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || 'render failed' });
+  }
+});
+
+// -------------------------------
+// JD 解析占位：data/jd_dict_zh.json 简单匹配
+// -------------------------------
+app.post('/v1/jd/parse', (req, res) => {
+  try {
+    const { raw_text = '' } = req.body || {};
+    const dictPath = path.join(REPO_ROOT, 'data/jd_dict_zh.json');
+    const dict = JSON.parse(fs.readFileSync(dictPath, 'utf-8'));
+    const text = String(raw_text);
+
+    const hit = (list = []) => list.filter((w) => text.includes(w));
+    const keywords = Array.from(new Set([...(hit(dict.skills || [])), ...(hit(dict.soft || []))]));
+
+    const result = {
+      jd_id: 'demo-' + Date.now(),
+      keywords,
+      requirements: {
+        must: hit(dict.skills || []),
+        nice: hit(dict.soft || []),
+        exp_years: (dict.exp_years_tokens || []).find((t) => text.includes(t)) || null,
+      },
+    };
+    res.json({ code: 0, data: result });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || 'error' });
+  }
+});
+
+// -------------------------------
+// 匹配分：简历技能 vs JD 关键词（Jaccard + 必须项命中）
+// -------------------------------
+app.post('/v1/match/score', (req, res) => {
+  try {
+    const dictPath = path.join(REPO_ROOT, 'data/jd_dict_zh.json');
+    const dict = JSON.parse(fs.readFileSync(dictPath, 'utf-8'));
+
+    const body = req.body || {};
+    // 1) 简历数据：若未传则读取样例
+    let resume = body.resume;
+    if (!resume) {
+      const samplePath = path.join(REPO_ROOT, 'samples/resume/alice.json');
+      resume = JSON.parse(fs.readFileSync(samplePath, 'utf-8'));
+    }
+    const resumeSkills = new Set((resume.skills || []).map((s) => s.name));
+
+    // 2) JD 关键词：优先 body.keywords；否则从 body.jd_text 基于词典提取
+    let jdKeywords = Array.isArray(body.keywords) ? body.keywords : [];
+    if ((!jdKeywords || jdKeywords.length === 0) && body.jd_text) {
+      const text = String(body.jd_text);
+      const hit = (list = []) => list.filter((w) => text.includes(w));
+      jdKeywords = Array.from(new Set([...(hit(dict.skills || [])), ...(hit(dict.soft || []))]));
+    }
+    const jdSet = new Set(jdKeywords);
+
+    // 3) Jaccard
+    const inter = new Set([...jdSet].filter((x) => resumeSkills.has(x)));
+    const union = new Set([...jdSet, ...resumeSkills]);
+    const jaccard = union.size ? inter.size / union.size : 0;
+
+    // 4) 命中/缺口
+    const hits = [...inter];
+    const gaps = [...jdSet].filter((k) => !resumeSkills.has(k)).slice(0, 3);
+
+    // 5) 简单得分
+    const mustSet = new Set((dict.skills || []).filter((k) => jdSet.has(k)));
+    const mustMiss = [...mustSet].filter((k) => !resumeSkills.has(k)).length;
+    let score = Math.round(jaccard * 100 - mustMiss * 10);
+    if (score < 0) score = 0;
+
+    res.json({
+      code: 0,
+      data: { match_score: score, hits, gaps, jd_keywords: [...jdSet], resume_skills: [...resumeSkills] },
+    });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
   }
