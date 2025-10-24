@@ -1,0 +1,12 @@
+packages:
+  - apps/*
+  - packages/*
+  - packages/*/*
+  - tests/*
+  - infra/*
+  - scripts
+  - data
+  - samples
+
+onlyBuiltDependencies:
+  - '@prisma/client'
