@@ -1,0 +1,9 @@
+.git
+node_modules
+**/node_modules
+**/.pnpm-store
+*.log
+.DS_Store
+.env
+.env.*
+resume.pdf
