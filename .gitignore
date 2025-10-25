@@ -1,18 +1,24 @@
-node_modules
+# Ignore node_modules directory
+node_modules/
+
+# Ignore .env files (except for .env.example)
 .env*
-.DS_Store
-dist
-coverage
-
-# local sqlite db
-apps/api/dev.db
-
-# local sqlite db
-apps/api/prisma/dev.db
-apps/api/prisma/prisma/
 !apps/api/.env.example
 
+# Ignore system files
+.DS_Store
 
-# local artifacts
+# Ignore dist and coverage directories
+dist/
+coverage/
+
+# Ignore local SQLite database files
+apps/api/dev.db
+
+# Ignore local SQLite database and Prisma files
+apps/api/prisma/dev.db
+apps/api/prisma/prisma/
+
+# Ignore local artifacts
 paid/
 apps/api/paid/
