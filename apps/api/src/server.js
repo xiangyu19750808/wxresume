@@ -46,6 +46,7 @@ function loadSampleResume() {
     return {};
   }
 }
+
 function hasResumeShape(value) {
   if (!value || typeof value !== 'object') return false;
   return (
@@ -88,7 +89,20 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
 // -------------------------------
 const app = express();
 
-/** 中间件顺序：reqid -> 解析体 -> 安全头 -> CORS -> 路由 */
+// 允许直接访问 files 目录
+const filesDirectory = path.join('C:', 'Users', 'pc', 'wxresume', 'files');  // 使用绝对路径
+console.log("Static files directory:", filesDirectory);  // 打印静态文件目录
+app.use('/files', express.static(filesDirectory, { 
+  fallthrough: false,  // 如果文件不存在，直接返回 404 错误
+  dotfiles: 'deny'     // 禁止访问以 "." 开头的文件
+}));
+
+// 根路径路由
+app.get('/', (req, res) => {
+  res.send('API is running');
+});
+
+// 中间件顺序：reqid -> 解析体 -> 安全头 -> CORS -> 路由
 app.use(reqid());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -137,11 +151,86 @@ app.get('/v1/results/db', async (req, res) => {
 });
 
 // -------------------------------
+// 新增 /v1/order/create 路由
+// -------------------------------
+app.post('/v1/order/create', (req, res) => {
+  const { plan, amount } = req.body;
+  
+  // 简单的订单创建逻辑（你可以根据需要扩展）
+  if (!plan || !amount) {
+    return res.status(400).json({ code: 400, msg: 'Missing plan or amount' });
+  }
+
+  // 模拟创建订单成功，返回订单信息
+  const order = {
+    orderId: `ORD${Date.now()}`,
+    plan,
+    amount,
+  };
+
+  res.json({ code: 0, data: order });
+});
+
+// -------------------------------
+// 新增 /v1/order/callback 路由
+// -------------------------------
+app.post('/v1/order/callback', (req, res) => {
+  const { out_trade_no, result, amount } = req.body;
+
+  // 检查必需的参数是否存在
+  if (!out_trade_no || !result || !amount) {
+    return res.status(400).json({ code: 400, msg: 'Missing required fields' });
+  }
+
+  // 假设支付成功，模拟更新订单状态
+  res.json({ code: 0, data: { out_trade_no, status: 'paid', status_changed: true } });
+});
+
+// -------------------------------
+// 新增 /v1/db/ping 接口：数据库连接检查
+// -------------------------------
+app.get('/v1/db/ping', async (req, res) => {
+  try {
+    // 简单的数据库连接检查，使用 Prisma 查询数据库
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok' });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// -------------------------------
 // 路由挂载（保持顺序）
 // -------------------------------
 app.use(createFileRouter());
 app.use(createResultsRouter());
 app.use(createUsersRouter());
+
+// -------------------------------
+// 生成分析报告
+// -------------------------------
+app.post('/v1/analysis/report', (req, res) => {
+  try {
+    const { analysis } = req.body;
+    const { match_score, hits, gaps } = analysis;
+
+    const radar = {
+      hard: Math.max(0, Math.min(100, match_score)),
+      experience: Math.max(0, Math.min(100, Math.round(match_score * 0.8))),
+      soft: Math.max(0, Math.min(100, 60 + hits.length * 5 - gaps.length * 10)),
+    };
+
+    const recommendations = [
+      gaps[0] ? `补齐技能：优先学习【${gaps[0]}】并产出作品` : '保持优势，完善项目案例',
+      radar.hard < 70 ? '强化硬技能：围绕JD做2个小项目' : '准备技术亮点总结，量化成果',
+      radar.soft < 70 ? '提升软能力：准备STAR面试故事' : '优化简历表达，突出协作成果',
+    ];
+
+    res.json({ code: 0, data: { radar, recommendations } });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || 'error' });
+  }
+});
 
 // -------------------------------
 // Mock 文件服务（main 分支遗留能力）
@@ -303,269 +392,6 @@ app.post('/v1/match/score', (req, res) => {
     res.json({
       code: 0,
       data: { match_score: score, hits, gaps, jd_keywords: [...jdSet], resume_skills: [...resumeSkills] },
-    });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'error' });
-  }
-});
-
-// -------------------------------
-// 诊断报告占位（雷达 + 三条建议）
-// -------------------------------
-app.post('/v1/analysis/report', (req, res) => {
-  try {
-    const a = req.body?.analysis || {};
-    const ms = Number(a.match_score || 0);
-    const hits = Array.isArray(a.hits) ? a.hits : [];
-    const gaps = Array.isArray(a.gaps) ? a.gaps : [];
-
-    const hard = Math.max(0, Math.min(100, ms));
-    const experience = Math.max(0, Math.min(100, Math.round(ms * 0.8)));
-    const soft = Math.max(0, Math.min(100, 60 + hits.length * 5 - gaps.length * 10));
-
-    const radar = { hard, experience, soft };
-    const recs = [
-      gaps[0] ? `补齐技能：优先学习【${gaps[0]}】并产出作品` : '保持优势，完善项目案例',
-      hard < 70 ? '强化硬技能：围绕JD做2个小项目' : '准备技术亮点总结，量化成果',
-      soft < 70 ? '提升软能力：准备STAR面试故事' : '优化简历表达，突出协作成果',
-    ];
-
-    res.json({ code: 0, data: { report_id: 'r-' + Date.now(), radar, recommendations: recs } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'error' });
-  }
-});
-
-// -------------------------------
-// 订单（占位）：create/status/callback
-// -------------------------------
-const MEM_ORDERS = new Map(); // key: out_trade_no -> {status, amount, plan, callbacks}
-
-const CALLBACK_AUDIT_LOG = path.join(REPO_ROOT, 'data', 'logs', 'wxpay-callback-audit.log');
-
-function appendCallbackAudit(event) {
-  try {
-    const dir = path.dirname(CALLBACK_AUDIT_LOG);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const line = `${new Date().toISOString()} ${JSON.stringify(event)}\n`;
-    fs.appendFileSync(CALLBACK_AUDIT_LOG, line, 'utf8');
-  } catch (err) {
-    console.warn('[wxpay-callback] audit log append failed', err);
-  }
-}
-
-function resolveCallbackStatus(payload = {}) {
-  const resource = payload.resource || {};
-  return (
-    resource.trade_state ||
-    payload.trade_state ||
-    payload.status ||
-    payload.result ||
-    payload.event_type ||
-    'UNKNOWN'
-  );
-}
-function normaliseStatusKey(status) {
-  if (!status) return 'UNKNOWN';
-  return String(status).trim().toUpperCase();
-}
-function resolveCallbackAmount(payload = {}) {
-  const fromResource = payload?.resource?.amount;
-  if (fromResource && typeof fromResource === 'object') {
-    if (typeof fromResource.total === 'number') return fromResource.total;
-    if (typeof fromResource.payer_total === 'number') return fromResource.payer_total;
-  }
-  const amount = payload?.amount;
-  if (typeof amount === 'number') return amount;
-  if (amount && typeof amount === 'object') {
-    if (typeof amount.total === 'number') return amount.total;
-    if (typeof amount.payer_total === 'number') return amount.payer_total;
-  }
-  if (typeof payload?.total === 'number') return payload.total;
-  return undefined;
-}
-function genOutTradeNo() {
-  const t = Date.now().toString();
-  return 'ORD' + t.slice(-8) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-}
-
-app.post('/v1/order/create', (req, res) => {
-  try {
-    const { plan = 'basic', amount = 1990 } = req.body || {};
-    const out_trade_no = genOutTradeNo();
-    MEM_ORDERS.set(out_trade_no, {
-      status: 'created',
-      amount,
-      plan,
-      created_at: Date.now(),
-      callbacks: { total: 0, statuses: {} },
-    });
-    const prepay_id = 'mock_prepay_' + out_trade_no;
-    res.json({ code: 0, data: { out_trade_no, prepay_id } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'error' });
-  }
-});
-
-app.get('/v1/order/status', (req, res) => {
-  try {
-    const out_trade_no = String(req.query.out_trade_no || '');
-    if (!out_trade_no) return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
-    const order = MEM_ORDERS.get(out_trade_no);
-    if (!order) return res.status(404).json({ code: 404, msg: 'order not found' });
-    res.json({
-      code: 0,
-      data: {
-        out_trade_no,
-        status: order.status,
-        amount: order.amount,
-        plan: order.plan,
-        callbacks: order.callbacks,
-      },
-    });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'error' });
-  }
-});
-
-app.post('/v1/order/callback', async (req, res) => {
-  try {
-    const requestId = req.requestId || req.id;
-
-    // 1) 验签（mock 可配置允许签名）
-    let verified;
-    try {
-      verified = await verifyWxpayCallback(req.headers, req.body);
-    } catch (err) {
-      const statusCode = 400;
-      appendCallbackAudit({
-        type: 'verify_failed',
-        statusCode,
-        message: err?.message || 'invalid signature',
-        reqid: requestId,
-      });
-      return res.status(statusCode).json({ code: statusCode, msg: 'invalid callback signature' });
-    }
-
-    // 2) 取单
-    const payload = req.body || {};
-    const out_trade_no = verified.out_trade_no || payload.out_trade_no;
-    if (!out_trade_no) {
-      appendCallbackAudit({ type: 'payload_invalid', statusCode: 400, message: 'missing out_trade_no', reqid: requestId });
-      return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
-    }
-    const order = MEM_ORDERS.get(out_trade_no);
-    if (!order) {
-      appendCallbackAudit({ type: 'order_not_found', out_trade_no, statusCode: 404, reqid: requestId });
-      return res.status(404).json({ code: 404, msg: 'order not found' });
-    }
-
-    // 3) 幂等（out_trade_no + status）
-    const statusRaw = resolveCallbackStatus(payload);
-    const statusKey = normaliseStatusKey(statusRaw);
-    const callbacks = order.callbacks || { total: 0, statuses: {} };
-    callbacks.total = (callbacks.total || 0) + 1;
-    const record = callbacks.statuses[statusKey] || { count: 0, processed: false, last_received_at: null };
-    record.count += 1;
-    record.last_received_at = Date.now();
-    callbacks.statuses[statusKey] = record;
-
-    let statusChanged = false;
-    if (!record.processed) {
-      if (statusKey.includes('SUCCESS')) {
-        const amount = resolveCallbackAmount(payload);
-        if (amount != null && Number(amount) !== Number(order.amount)) {
-          appendCallbackAudit({
-            type: 'amount_mismatch',
-            out_trade_no,
-            expected: order.amount,
-            received: amount,
-            statusCode: 400,
-            reqid: requestId,
-          });
-          return res.status(400).json({ code: 400, msg: 'amount mismatch' });
-        }
-        order.status = 'paid';
-        order.paid_at = Date.now();
-      } else {
-        order.status = 'failed';
-      }
-      record.processed = true;
-      record.processed_at = Date.now();
-      statusChanged = true;
-    }
-
-    order.callbacks = callbacks;
-    MEM_ORDERS.set(out_trade_no, order);
-
-    appendCallbackAudit({
-      type: 'callback_processed',
-      out_trade_no,
-      status: statusKey,
-      replay: record.count,
-      total: callbacks.total,
-      statusChanged,
-      reqid: requestId,
-    });
-
-    res.json({
-      code: 0,
-      data: {
-        out_trade_no,
-        status: order.status,
-        status_changed: statusChanged,
-        callbacks,
-      },
-    });
-  } catch (e) {
-    appendCallbackAudit({ type: 'callback_internal_error', message: e?.message || 'internal error', reqid: req.requestId || req.id });
-    res.status(500).json({ code: 500, msg: e?.message || 'error' });
-  }
-});
-
-// -------------------------------
-// 退款（admin-only，经 JWT 校验）
-// -------------------------------
-app.post('/v1/order/refund', jwtMiddleware, async (req, res) => {
-  try {
-    if (!req.user || req.user.role !== 'admin') {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
-
-    const { out_trade_no, amount } = req.body || {};
-    if (!out_trade_no) {
-      return res.status(400).json({ code: 400, msg: 'missing out_trade_no' });
-    }
-
-    const order = MEM_ORDERS.get(out_trade_no);
-    if (!order) {
-      return res.status(404).json({ code: 404, msg: 'order not found' });
-    }
-
-    const normalisedAmount = (() => {
-      if (typeof amount === 'number') return amount;
-      if (amount && typeof amount.total === 'number') return amount.total;
-      return order.amount;
-    })();
-
-    const refundResult = await requestWxpayRefund({
-      out_trade_no,
-      amount: { total: normalisedAmount, currency: 'CNY' },
-    });
-
-    order.status = 'refunding';
-    order.refund_amount = normalisedAmount;
-    order.refund_requested_at = Date.now();
-    MEM_ORDERS.set(out_trade_no, order);
-
-    res.json({
-      code: 0,
-      data: {
-        out_trade_no,
-        status: 'processing',
-        refund_id: refundResult.refund_id,
-        accepted_at: refundResult.accepted_at,
-      },
     });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
