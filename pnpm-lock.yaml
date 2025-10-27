@@ -15,8 +15,8 @@ importers:
   apps/api:
     dependencies:
       '@prisma/client':
-        specifier: 6.17.1
-        version: 6.17.1(prisma@6.17.1)
+        specifier: 6.18.0
+        version: 6.18.0(prisma@6.17.1)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -48,8 +48,8 @@ importers:
 
 packages:
 
-  /@prisma/client@6.17.1(prisma@6.17.1):
-    resolution: {integrity: sha512-zL58jbLzYamjnNnmNA51IOZdbk5ci03KviXCuB0Tydc9btH2kDWsi1pQm2VecviRTM7jGia0OPPkgpGnT3nKvw==}
+  /@prisma/client@6.18.0(prisma@6.17.1):
+    resolution: {integrity: sha512-jnL2I9gDnPnw4A+4h5SuNn8Gc+1mL1Z79U/3I9eE2gbxJG1oSA+62ByPW4xkeDgwE0fqMzzpAZ7IHxYnLZ4iQA==}
     engines: {node: '>=18.18'}
     requiresBuild: true
     peerDependencies:
