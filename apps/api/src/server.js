@@ -3,6 +3,7 @@ import express from 'express';
 import helmet from 'helmet';
 import fs from 'node:fs';
 import path from 'node:path';
+import jwt from 'jsonwebtoken';
 
 import { createUsersRouter } from './modules/users/index.js';
 import { createFileRouter } from './modules/file/index.js';
@@ -205,6 +206,33 @@ app.get('/v1/db/ping', async (req, res) => {
 app.use(createFileRouter());
 app.use(createResultsRouter());
 app.use(createUsersRouter());
+
+// -------------------------------
+// 微信回调路由：发放 JWT
+// -------------------------------
+app.get('/v1/auth/wx/callback', async (req, res) => {
+  const query = req.query || {};
+  const code = String(query.code || '').trim();
+  if (!code) {
+    return res.status(400).json({ code: 400, msg: 'code required' });
+  }
+
+  try {
+    // 模拟用户数据
+    const user = { id: 'demo-user', nickname: '演示用户', email: 'demo.user@wxresume.dev' };
+
+    // 返回 JWT token 和用户数据
+    const token = jwt.sign({ id: user.id}, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    res.json({
+      code: 0,
+      data: { token, user },
+    });
+  } catch (err) {
+    console.error('[auth.wx.callback] failed', err);
+    res.status(500).json({ code: 500, msg: 'internal error' });
+  }
+});
 
 // -------------------------------
 // 生成分析报告

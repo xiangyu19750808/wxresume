@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@8.15.7",
   "scripts": {
+    "start": "node ./apps/api/src/server.js",
     "api:openapi:lint": "node ./scripts/check-openapi.mjs",
     "dev": "pnpm -C apps/api dev",
     "lint": "pnpm -r --if-present lint",
@@ -17,6 +18,8 @@
     "packages/*"
   ],
   "dependencies": {
-    "dotenv": "^17.2.3"
+    "@prisma/client": "6.18.0",
+    "dotenv": "^17.2.3",
+    "prisma": "6.18.0"
   }
 }
