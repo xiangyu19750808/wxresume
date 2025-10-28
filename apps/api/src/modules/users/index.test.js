@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import express from "express";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret";
+process.env.E2E_LIGHT = "1";
 
+const { default: jwt } = await import("jsonwebtoken");
 const { registerUsersModule } = await import("./index.js");
 const { prisma } = await import("../../db.js");
 
@@ -41,6 +43,8 @@ test("POST login returns JWT and allows subsequent profile fetch", { concurrency
     id: "user-demo",
     email: "demo.user@wxresume.dev",
     nickname: "演示用户",
+    avatar_url: "https://cdn.wxresume.dev/u.png",
+    phone: "13800138000",
     created_at: new Date("2024-01-01T00:00:00.000Z"),
   };
 
@@ -68,6 +72,8 @@ test("POST login returns JWT and allows subsequent profile fetch", { concurrency
         id: user.id,
         email: user.email,
         nickname: user.nickname,
+        avatar_url: user.avatar_url,
+        phone: user.phone,
         created_at: user.created_at.toISOString()
       });
 
@@ -84,12 +90,91 @@ test("POST login returns JWT and allows subsequent profile fetch", { concurrency
         id: user.id,
         email: user.email,
         nickname: user.nickname,
+        avatar_url: user.avatar_url,
+        phone: user.phone,
         created_at: user.created_at.toISOString()
       });
     });
   } finally {
     prisma.user.findUnique = original;
   }
+});
+
+test("GET /v1/users/profile accepts query token and falls back to demo user", { concurrency: false }, async () => {
+  const app = createApp();
+  const original = prisma.user.findUnique;
+  prisma.user.findUnique = async () => null;
+
+  try {
+    await withServer(app, async (baseURL) => {
+      const token = jwt.sign({ id: "demo-user", role: "user" }, process.env.JWT_SECRET, {
+        algorithm: "HS256",
+        expiresIn: "7d",
+      });
+
+      const res = await fetch(`${baseURL}/v1/users/profile?token=${token}`);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.code, 0);
+      assert.deepEqual(body.data.user, {
+        id: "demo-user",
+        nickname: "演示用户",
+        email: "demo.user@wxresume.dev",
+        avatar_url: null,
+        phone: null,
+        created_at: "2024-01-01T00:00:00.000Z",
+      });
+    });
+  } finally {
+    prisma.user.findUnique = original;
+  }
+});
+
+test("PUT /v1/users/profile updates editable fields", { concurrency: false }, async () => {
+  const app = createApp();
+
+  await withServer(app, async (baseURL) => {
+    const loginRes = await fetch(`${baseURL}/v1/users/profile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: "demo-user" })
+    });
+
+    assert.equal(loginRes.status, 200);
+    const loginBody = await loginRes.json();
+    const token = loginBody.data.token;
+
+    const updateRes = await fetch(`${baseURL}/v1/users/profile`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        nickname: "新的昵称",
+        phone: "13900001111",
+        avatar_url: "https://cdn.wxresume.dev/avatar.png",
+      }),
+    });
+
+    assert.equal(updateRes.status, 200);
+    const updateBody = await updateRes.json();
+    assert.equal(updateBody.code, 0);
+    assert.equal(updateBody.data.user.nickname, "新的昵称");
+    assert.equal(updateBody.data.user.phone, "13900001111");
+    assert.equal(updateBody.data.user.avatar_url, "https://cdn.wxresume.dev/avatar.png");
+
+    const profileRes = await fetch(`${baseURL}/v1/users/profile`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    assert.equal(profileRes.status, 200);
+    const profileBody = await profileRes.json();
+    assert.equal(profileBody.code, 0);
+    assert.equal(profileBody.data.user.nickname, "新的昵称");
+    assert.equal(profileBody.data.user.phone, "13900001111");
+    assert.equal(profileBody.data.user.avatar_url, "https://cdn.wxresume.dev/avatar.png");
+  });
 });
 
 test("POST login returns 404 when user is missing", { concurrency: false }, async () => {

@@ -5,7 +5,23 @@ import { prisma } from '../../db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const TOKEN_OPTIONS = { algorithm: 'HS256', expiresIn: '7d' };
-const USER_SELECT = { id: true, email: true, nickname: true, created_at: true };
+const USER_SELECT = {
+  id: true,
+  email: true,
+  nickname: true,
+  avatar_url: true,
+  phone: true,
+  created_at: true,
+};
+
+const FALLBACK_USER = {
+  id: 'demo-user',
+  nickname: '演示用户',
+  email: 'demo.user@wxresume.dev',
+  avatar_url: null,
+  phone: null,
+  created_at: '2024-01-01T00:00:00.000Z',
+};
 
 function ok(res, data) {
   if (typeof res.ok === 'function') return res.ok(data);
@@ -31,7 +47,21 @@ function signToken({ id, role = 'user' }) {
 }
 
 async function loadUserById(userId) {
-  return prisma.user.findUnique({ where: { id: userId }, select: USER_SELECT });
+  if (!userId) return null;
+  try {
+    const record = await prisma.user.findUnique({ where: { id: userId }, select: USER_SELECT });
+    if (record) return record;
+  } catch (err) {
+    if (String(userId) !== FALLBACK_USER.id) {
+      throw err;
+    }
+  }
+
+  if (String(userId) === FALLBACK_USER.id) {
+    return { ...FALLBACK_USER };
+  }
+
+  return null;
 }
 
 function parseUserId(raw) {
@@ -89,6 +119,65 @@ export function createUsersRouter({ logger = console } = {}) {
       return res.json({ code: 0, data: { user } });
     } catch (err) {
       (logger?.error || console.error)('[users.me] fetch failed', err);
+      return res.status(500).json({ code: 500, msg: 'internal error' });
+    }
+  });
+
+  router.put('/v1/users/profile', jwtMiddleware, async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ code: 401, msg: 'unauthorized' });
+
+    const body = req.body || {};
+    const payload = {};
+
+    if (body.nickname !== undefined) {
+      payload.nickname = String(body.nickname || '').trim();
+    }
+    if (body.email !== undefined) {
+      payload.email = String(body.email || '').trim() || null;
+    }
+    if (body.phone !== undefined) {
+      payload.phone = String(body.phone || '').trim() || null;
+    }
+    if (body.avatar_url !== undefined || body.avatarUrl !== undefined) {
+      payload.avatar_url = String(body.avatar_url ?? body.avatarUrl ?? '').trim() || null;
+    }
+
+    const updateKeys = Object.keys(payload).filter((key) => payload[key] !== undefined);
+    if (updateKeys.length === 0) {
+      return res.status(400).json({ code: 400, msg: 'no updatable fields' });
+    }
+
+    try {
+      let updated;
+      if (typeof prisma.user?.update === 'function') {
+        updated = await prisma.user.update({
+          where: { id: userId },
+          data: payload,
+          select: USER_SELECT,
+        });
+      } else {
+        throw new Error('update_not_supported');
+      }
+
+      return res.json({ code: 0, data: { user: updated } });
+    } catch (err) {
+      const notFound = err?.code === 'P2025' || /not found/i.test(err?.message || '');
+      if (notFound) {
+        // 如果 token 指向演示账号，则同步更新回退数据
+        if (String(userId) === FALLBACK_USER.id) {
+          Object.assign(FALLBACK_USER, payload);
+          return res.json({ code: 0, data: { user: { ...FALLBACK_USER } } });
+        }
+        return res.status(404).json({ code: 404, msg: 'user not found' });
+      }
+
+      if (String(userId) === FALLBACK_USER.id) {
+        Object.assign(FALLBACK_USER, payload);
+        return res.json({ code: 0, data: { user: { ...FALLBACK_USER } } });
+      }
+
+      (logger?.error || console.error)('[users.profile] update failed', err);
       return res.status(500).json({ code: 500, msg: 'internal error' });
     }
   });

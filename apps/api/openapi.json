@@ -129,7 +129,78 @@
         ],
         "responses": {
           "200": {
-            "description": "ok"
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "example": 0
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "token": {
+                          "type": "string",
+                          "description": "Signed JWT token"
+                        },
+                        "state": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "nickname": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "avatar_url": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "email": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "phone": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "created_at": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "token",
+                        "user"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -206,6 +277,19 @@
                             "nickname": {
                               "type": "string"
                             },
+                            "avatar_url": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "uri"
+                            },
+                            "phone": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
                             "created_at": {
                               "type": "string",
                               "format": "date-time"
@@ -273,6 +357,19 @@
                             "nickname": {
                               "type": "string"
                             },
+                            "avatar_url": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "uri"
+                            },
+                            "phone": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
                             "created_at": {
                               "type": "string",
                               "format": "date-time"
@@ -303,6 +400,117 @@
             "description": "internal error"
           }
         }
+      },
+      "put": {
+        "summary": "Update profile fields",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nickname": {
+                    "type": "string",
+                    "description": "Display name"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "avatar_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "avatarUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "camelCase alias"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "example": 0
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "email": {
+                              "type": "string",
+                              "format": "email"
+                            },
+                            "nickname": {
+                              "type": "string"
+                            },
+                            "avatar_url": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "uri"
+                            },
+                            "phone": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "created_at": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "no updatable fields"
+          },
+          "401": {
+            "description": "missing or invalid JWT"
+          },
+          "404": {
+            "description": "user not found"
+          },
+          "500": {
+            "description": "internal error"
+          }
+        }
       }
     },
     "/v1/order/create": {
@@ -320,17 +528,177 @@
                   },
                   "amount": {
                     "type": "integer"
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "description": "Optional user identifier"
                   }
-                }
+                },
+                "required": [
+                  "plan",
+                  "amount"
+                ]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "ok"
-          }
-        }
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "example": 0
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "orderId": {
+                          "type": "string"
+                        },
+                        "out_trade_no": {
+                          "type": "string"
+                        },
+                        "plan": {
+                          "type": "string"
+                        },
+                        "amount": {
+                          "type": "integer"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "prepay_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "transaction_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "paid_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "last_callback_result": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "callbacks": {
+                          "type": "object",
+                          "properties": {
+                            "last_received_at": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "date-time"
+                            },
+                            "last_signature": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "last_payload": {
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "verifications": {
+                              "type": "object",
+                              "properties": {
+                                "last_event_type": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "last_transaction_id": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "last_success_time": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "format": "date-time"
+                                }
+                              }
+                            },
+                            "statuses": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "count": {
+                                    "type": "integer"
+                                  },
+                                  "last_at": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "format": "date-time"
+                                  }
+                                },
+                                "required": [
+                                  "count"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "user_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "orderId",
+                        "out_trade_no",
+                        "status"
+                      ]
+                            }
+                          }
+                        }
+                      },
+                      "additionalProperties": false,
+                      "properties": {
+                        "status_changed": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
       }
     },
     "/v1/order/status": {
@@ -343,7 +711,17 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": false,
+            "description": "Order number returned from /v1/order/create"
+          },
+          {
+            "name": "order_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "description": "Alias of out_trade_no"
           }
         ],
         "responses": {
@@ -355,28 +733,117 @@
                   "type": "object",
                   "properties": {
                     "code": {
-                      "type": "integer"
+                      "type": "integer",
+                      "example": 0
                     },
                     "data": {
                       "type": "object",
                       "properties": {
+                        "orderId": {
+                          "type": "string"
+                        },
                         "out_trade_no": {
                           "type": "string"
+                        },
+                        "plan": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "amount": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
                         },
                         "status": {
                           "type": "string"
                         },
-                        "amount": {
-                          "type": "integer"
+                        "prepay_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
-                        "plan": {
-                          "type": "string"
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "user_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "transaction_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "paid_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "last_callback_result": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "callbacks": {
                           "type": "object",
                           "properties": {
-                            "total": {
-                              "type": "integer"
+                            "last_received_at": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "date-time"
+                            },
+                            "last_signature": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "last_payload": {
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "verifications": {
+                              "type": "object",
+                              "properties": {
+                                "last_event_type": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "last_transaction_id": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "last_success_time": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "format": "date-time"
+                                }
+                              }
                             },
                             "statuses": {
                               "type": "object",
@@ -386,16 +853,17 @@
                                   "count": {
                                     "type": "integer"
                                   },
-                                  "processed": {
-                                    "type": "boolean"
-                                  },
-                                  "processed_at": {
-                                    "type": "integer"
-                                  },
-                                  "last_received_at": {
-                                    "type": "integer"
+                                  "last_at": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "format": "date-time"
                                   }
-                                }
+                                },
+                                "required": [
+                                  "count"
+                                ]
                               }
                             }
                           }
@@ -435,10 +903,14 @@
                   },
                   "amount": {
                     "type": "integer"
+                  },
+                  "transaction_id": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "out_trade_no"
+                  "out_trade_no",
+                  "result"
                 ]
               }
             }
@@ -453,25 +925,123 @@
                   "type": "object",
                   "properties": {
                     "code": {
-                      "type": "integer"
+                      "type": "integer",
+                      "example": 0
                     },
                     "data": {
                       "type": "object",
                       "properties": {
+                        "orderId": {
+                          "type": "string"
+                        },
                         "out_trade_no": {
                           "type": "string"
+                        },
+                        "plan": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "amount": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
                         },
                         "status": {
                           "type": "string"
                         },
-                        "status_changed": {
-                          "type": "boolean"
+                        "prepay_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "created_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "updated_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "user_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "transaction_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "paid_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "last_callback_result": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "callbacks": {
                           "type": "object",
                           "properties": {
-                            "total": {
-                              "type": "integer"
+                            "last_received_at": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "date-time"
+                            },
+                            "last_signature": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "last_payload": {
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "verifications": {
+                              "type": "object",
+                              "properties": {
+                                "last_event_type": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "last_transaction_id": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "last_success_time": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "format": "date-time"
+                                }
+                              }
                             },
                             "statuses": {
                               "type": "object",
@@ -481,19 +1051,23 @@
                                   "count": {
                                     "type": "integer"
                                   },
-                                  "processed": {
-                                    "type": "boolean"
-                                  },
-                                  "processed_at": {
-                                    "type": "integer"
-                                  },
-                                  "last_received_at": {
-                                    "type": "integer"
+                                  "last_at": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "format": "date-time"
                                   }
-                                }
+                                },
+                                "required": [
+                                  "count"
+                                ]
                               }
                             }
                           }
+                        },
+                        "status_changed": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -515,18 +1089,7 @@
           "500": {
             "description": "internal error"
           }
-        },
-        "parameters": [
-          {
-            "name": "Wechatpay-Signature",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Mock callback signature (defaults to wxpay-fake-signature)"
-          }
-        ]
+        }
       }
     },
     "/v1/order/refund": {
@@ -582,6 +1145,236 @@
           },
           "403": {
             "description": "forbidden"
+          }
+        }
+      }
+    },
+    "/v1/resumes/parse": {
+      "post": {
+        "summary": "Parse plain text resume into structured JSON",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "raw_text": {
+                    "type": "string",
+                    "description": "Resume text content"
+                  },
+                  "text": {
+                    "type": "string",
+                    "description": "Alias of raw_text"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Structured resume JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "example": 0
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "basics": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "email": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "phone": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ]
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "skills": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ]
+                          }
+                        },
+                        "work": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "text"
+                            ]
+                          }
+                        },
+                        "projects": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "text"
+                            ]
+                          }
+                        },
+                        "education": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "text"
+                            ]
+                          }
+                        },
+                        "metadata": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "required": [
+                        "basics"
+                      ]
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/resume/render": {
+      "post": {
+        "summary": "Render resume JSON to HTML using built-in templates",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "templateId": {
+                    "type": "string",
+                    "description": "Template identifier"
+                  },
+                  "resume": {
+                    "type": "object",
+                    "description": "Resume JSON payload"
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rendered HTML",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer",
+                      "example": 0
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "html": {
+                          "type": "string"
+                        },
+                        "templateId": {
+                          "type": "string"
+                        },
+                        "fontWarnings": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "metadata": {
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "html",
+                        "templateId"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Render failed"
           }
         }
       }

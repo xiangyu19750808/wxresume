@@ -3,6 +3,7 @@ import express from 'express';
 import helmet from 'helmet';
 import fs from 'node:fs';
 import path from 'node:path';
+import jwt from 'jsonwebtoken';
 
 import { createUsersRouter } from './modules/users/index.js';
 import { createFileRouter } from './modules/file/index.js';
@@ -20,6 +21,7 @@ import { htmlToPDFBuffer } from './render.playwright.js';
 
 // WXPay 适配（mock）
 import {
+  unifiedOrder as createWxpayOrder,
   refund as requestWxpayRefund,
   verifyCallback as verifyWxpayCallback,
 } from '../../../packages/adapters/wxpay/src/index.js';
@@ -37,6 +39,22 @@ const REPO_ROOT = (() => {
   return APP_CWD;
 })();
 const SAMPLE_RESUME_PATH = path.join(REPO_ROOT, 'samples/resume/alice.json');
+
+const ordersStore = new Map();
+
+function createEmptyCallbacksSnapshot() {
+  return {
+    statuses: {},
+    last_received_at: null,
+    last_signature: null,
+    last_payload: null,
+    verifications: {
+      last_event_type: null,
+      last_transaction_id: null,
+      last_success_time: null,
+    },
+  };
+}
 
 function loadSampleResume() {
   try {
@@ -56,6 +74,98 @@ function hasResumeShape(value) {
     Boolean(value.skills) ||
     Boolean(value.projects)
   );
+}
+
+const SECTION_KEYWORDS = {
+  summary: ['自我评价', '个人简介', '自我介绍'],
+  skills: ['技能', '技能特长', '专业技能'],
+  work: ['工作经历', '工作经验', '实习经历'],
+  education: ['教育经历', '教育背景'],
+  projects: ['项目经历', '项目经验'],
+};
+
+function detectSection(line) {
+  if (!line) return null;
+  const normalized = String(line).replace(/[：:]/g, '').trim();
+  if (!normalized) return null;
+  for (const [section, keywords] of Object.entries(SECTION_KEYWORDS)) {
+    if (keywords.some((keyword) => normalized.startsWith(keyword))) {
+      return section;
+    }
+  }
+  return null;
+}
+
+function extractEmail(text) {
+  const match = String(text || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match ? match[0] : null;
+}
+
+function extractPhone(text) {
+  const match = String(text || '').match(/1[3-9]\d{9}/);
+  return match ? match[0] : null;
+}
+
+function parseResumeText(rawText) {
+  const text = String(rawText || '').replace(/\r\n/g, '\n');
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) {
+    return { resume: loadSampleResume(), warnings: ['empty_text'] };
+  }
+
+  const basics = { name: lines.shift() || '候选人', email: null, phone: null };
+  const sections = {
+    summary: [],
+    skills: [],
+    work: [],
+    education: [],
+    projects: [],
+  };
+
+  let currentSection = 'summary';
+
+  for (const line of lines) {
+    const email = extractEmail(line);
+    if (email && !basics.email) basics.email = email;
+    const phone = extractPhone(line);
+    if (phone && !basics.phone) basics.phone = phone;
+
+    const matchedSection = detectSection(line);
+    if (matchedSection) {
+      currentSection = matchedSection;
+      continue;
+    }
+
+    if (currentSection === 'skills') {
+      const tokens = line
+        .split(/[、，,;；\s]+/)
+        .map((token) => token.trim())
+        .filter(Boolean);
+      sections.skills.push(...tokens);
+    } else {
+      sections[currentSection].push(line);
+    }
+  }
+
+  const skills = Array.from(new Set(sections.skills)).map((name) => ({ name }));
+  const shapeFrom = (key) => sections[key].map((text, index) => ({ id: index + 1, text }));
+
+  return {
+    resume: {
+      basics,
+      summary: sections.summary.join('\n'),
+      skills,
+      work: shapeFrom('work'),
+      projects: shapeFrom('projects'),
+      education: shapeFrom('education'),
+      metadata: { source: 'text' },
+    },
+    warnings: [],
+  };
 }
 
 const fontSetup = describeFontSetup();
@@ -78,6 +188,16 @@ if (!JWT_SECRET) {
   throw new Error(message);
 }
 
+const JWT_SIGN_OPTIONS = { algorithm: 'HS256', expiresIn: '7d' };
+const PUBLIC_USER_FIELDS = {
+  id: true,
+  nickname: true,
+  avatar_url: true,
+  email: true,
+  phone: true,
+  created_at: true,
+};
+
 // CORS 白名单（逗号分隔）
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
@@ -89,13 +209,18 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
 // -------------------------------
 const app = express();
 
-// 允许直接访问 files 目录
-const filesDirectory = path.join('C:', 'Users', 'pc', 'wxresume', 'files');  // 使用绝对路径
-console.log("Static files directory:", filesDirectory);  // 打印静态文件目录
-app.use('/files', express.static(filesDirectory, { 
-  fallthrough: false,  // 如果文件不存在，直接返回 404 错误
-  dotfiles: 'deny'     // 禁止访问以 "." 开头的文件
-}));
+// 允许直接访问仓库内的 files 目录
+const filesDirectory = path.join(REPO_ROOT, 'files');
+if (process.env.NODE_ENV !== 'test') {
+  console.log('[static] files directory:', filesDirectory);
+}
+app.use(
+  '/files',
+  express.static(filesDirectory, {
+    fallthrough: false, // 如果文件不存在，直接返回 404 错误
+    dotfiles: 'deny', // 禁止访问以 "." 开头的文件
+  })
+);
 
 // 根路径路由
 app.get('/', (req, res) => {
@@ -150,23 +275,126 @@ app.get('/v1/results/db', async (req, res) => {
   }
 });
 
+const FALLBACK_USER_PROFILE = {
+  id: 'demo-user',
+  nickname: '演示用户',
+  avatar_url: null,
+  email: 'demo.user@wxresume.dev',
+  phone: null,
+  created_at: '2024-01-01T00:00:00.000Z',
+};
+
+// 模拟微信 OAuth 回调 -> 发放 JWT
+app.get('/v1/auth/wx/callback', async (req, res) => {
+  const query = req.query || {};
+  const code = String(query.code || '').trim();
+  if (!code) {
+    return res.status(400).json({ code: 400, msg: 'code required' });
+  }
+
+  try {
+    let user = null;
+    try {
+      user = await prisma.user.findFirst({ where: { openid: code }, select: PUBLIC_USER_FIELDS });
+      if (!user) {
+        user = await prisma.user.findFirst({ orderBy: { created_at: 'asc' }, select: PUBLIC_USER_FIELDS });
+      }
+    } catch (dbError) {
+      console.warn('[auth.wx.callback] falling back to demo user due to prisma error:', dbError?.message);
+    }
+
+    if (!user) {
+      user = { ...FALLBACK_USER_PROFILE };
+    }
+
+    const token = jwt.sign({ id: user.id, role: 'user' }, JWT_SECRET, JWT_SIGN_OPTIONS);
+
+    res.json({
+      code: 0,
+      data: {
+        token,
+        user,
+        state: query.state ?? null,
+      },
+    });
+  } catch (err) {
+    console.error('[auth.wx.callback] failed', err);
+    res.status(500).json({ code: 500, msg: 'internal error' });
+  }
+});
+
 // -------------------------------
 // 新增 /v1/order/create 路由
 // -------------------------------
-app.post('/v1/order/create', (req, res) => {
-  const { plan, amount } = req.body;
-  
-  // 简单的订单创建逻辑（你可以根据需要扩展）
-  if (!plan || !amount) {
-    return res.status(400).json({ code: 400, msg: 'Missing plan or amount' });
+app.post('/v1/order/create', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const { plan, amount, user_id: userId, userId: camelUserId } = body;
+
+    if (!plan || amount === undefined || amount === null) {
+      return res.status(400).json({ code: 400, msg: 'Missing plan or amount' });
+    }
+
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return res.status(400).json({ code: 400, msg: 'Invalid amount' });
+    }
+
+    const now = new Date().toISOString();
+    const userIdentifier = userId || camelUserId || null;
+    const outTradeNo = `WX${Date.now()}${Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, '0')}`;
+
+    let unifiedOrderResult;
+    try {
+      unifiedOrderResult = await createWxpayOrder({
+        out_trade_no: outTradeNo,
+        amount: { total: numericAmount, currency: 'CNY' },
+        openid: body.openid || `mock-openid-${userIdentifier || 'guest'}`,
+        payer: body.payer,
+      });
+    } catch (err) {
+      console.error('[order.create] failed to create unified order', err);
+      return res.status(500).json({ code: 500, msg: 'failed_to_create_order' });
+    }
+
+    const order = {
+      orderId: unifiedOrderResult.out_trade_no,
+      out_trade_no: unifiedOrderResult.out_trade_no,
+      plan,
+      amount: numericAmount,
+      status: 'created',
+      created_at: now,
+      updated_at: now,
+      user_id: userIdentifier,
+      prepay_id: unifiedOrderResult.prepay_id,
+      transaction_id: null,
+      paid_at: null,
+      last_callback_result: null,
+      callbacks: createEmptyCallbacksSnapshot(),
+    };
+
+    ordersStore.set(order.out_trade_no, order);
+
+    res.json({ code: 0, data: order });
+  } catch (err) {
+    console.error('[order.create] unexpected error', err);
+    res.status(500).json({ code: 500, msg: 'internal error' });
+  }
+});
+
+app.get('/v1/order/status', (req, res) => {
+  const query = req.query || {};
+  const orderId = query.order_id || query.out_trade_no || query.orderId;
+  if (!orderId) {
+    return res.status(400).json({ code: 400, msg: 'order_id required' });
   }
 
-  // 模拟创建订单成功，返回订单信息
-  const order = {
-    orderId: `ORD${Date.now()}`,
-    plan,
-    amount,
-  };
+  const order = ordersStore.get(String(orderId));
+  if (!order) {
+    return res.status(404).json({ code: 404, msg: 'order not found' });
+  }
 
   res.json({ code: 0, data: order });
 });
@@ -174,16 +402,89 @@ app.post('/v1/order/create', (req, res) => {
 // -------------------------------
 // 新增 /v1/order/callback 路由
 // -------------------------------
-app.post('/v1/order/callback', (req, res) => {
-  const { out_trade_no, result, amount } = req.body;
+app.post('/v1/order/callback', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const outTradeNo = body.out_trade_no || body.outTradeNo;
+    const resultToken = body.result || body.trade_state || body.event_type;
 
-  // 检查必需的参数是否存在
-  if (!out_trade_no || !result || !amount) {
-    return res.status(400).json({ code: 400, msg: 'Missing required fields' });
+    if (!outTradeNo || !resultToken) {
+      return res.status(400).json({ code: 400, msg: 'Missing required fields' });
+    }
+
+    let verification;
+    try {
+      verification = await verifyWxpayCallback(req.headers, body);
+    } catch (err) {
+      if (err?.code === 'ERR_WXPAY_INVALID_SIGNATURE') {
+        return res.status(401).json({ code: 401, msg: 'invalid_signature' });
+      }
+      console.error('[order.callback] verification failed', err);
+      return res.status(500).json({ code: 500, msg: 'verification_failed' });
+    }
+
+    const previous = ordersStore.get(String(outTradeNo));
+    if (!previous) {
+      return res.status(404).json({ code: 404, msg: 'order not found' });
+    }
+
+    const now = new Date().toISOString();
+    const normalizedResult = String(resultToken).toUpperCase();
+    const derivedStatus = normalizedResult === 'SUCCESS' ? 'paid' : normalizedResult;
+    const statusChanged = previous.status !== derivedStatus;
+
+    const callbacks = {
+      ...(previous.callbacks ?? createEmptyCallbacksSnapshot()),
+      statuses: {
+        ...((previous.callbacks && previous.callbacks.statuses) || {}),
+      },
+    };
+
+    const statusEntry = callbacks.statuses[normalizedResult] || { count: 0, last_at: null };
+    callbacks.statuses[normalizedResult] = {
+      count: (statusEntry.count || 0) + 1,
+      last_at: now,
+    };
+    callbacks.last_received_at = now;
+    callbacks.last_signature =
+      req.headers['wechatpay-signature'] ||
+      req.headers['wxpay-signature'] ||
+      req.headers['x-wxpay-signature'] ||
+      req.headers['x-wechatpay-signature'] ||
+      null;
+    callbacks.last_payload = body;
+    callbacks.verifications = {
+      last_event_type: verification.event_type,
+      last_transaction_id: verification.transaction_id,
+      last_success_time: verification.success_time,
+    };
+
+    const transactionId =
+      body.transaction_id || verification.transaction_id || previous.transaction_id;
+    const callbackAmount =
+      body.amount !== undefined && body.amount !== null ? Number(body.amount) : previous.amount;
+
+    const updated = {
+      ...previous,
+      status: derivedStatus,
+      amount: Number.isFinite(callbackAmount) ? callbackAmount : previous.amount,
+      transaction_id: transactionId,
+      paid_at:
+        derivedStatus === 'paid'
+          ? previous.paid_at || verification.success_time || now
+          : previous.paid_at,
+      updated_at: now,
+      last_callback_result: normalizedResult,
+      callbacks,
+    };
+
+    ordersStore.set(String(outTradeNo), updated);
+
+    res.json({ code: 0, data: { ...updated, status_changed: statusChanged } });
+  } catch (err) {
+    console.error('[order.callback] unexpected error', err);
+    res.status(500).json({ code: 500, msg: 'internal error' });
   }
-
-  // 假设支付成功，模拟更新订单状态
-  res.json({ code: 0, data: { out_trade_no, status: 'paid', status_changed: true } });
 });
 
 // -------------------------------
@@ -268,6 +569,17 @@ app.get('/v1/templates', (req, res) => {
 // -------------------------------
 // 渲染：resume -> HTML -> PDF
 // -------------------------------
+app.post('/v1/resumes/parse', (req, res) => {
+  try {
+    const body = req.body || {};
+    const sourceText = body.raw_text ?? body.text ?? '';
+    const parsed = parseResumeText(sourceText);
+    res.json({ code: 0, data: parsed.resume, warnings: parsed.warnings });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || 'parse failed' });
+  }
+});
+
 app.post('/v1/render/mock', async (_req, res) => {
   try {
     const resume = loadSampleResume();
@@ -276,6 +588,37 @@ app.post('/v1/render/mock', async (_req, res) => {
     res.json({ code: 0, data: { bytes: buf.length, templateId: metadata?.templateId || 'classic' } });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
+  }
+});
+
+app.post('/v1/resume/render', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const templateId = String(body.templateId || body.template_id || 'classic');
+
+    let resumePayload = {};
+    if (hasResumeShape(body.resume)) {
+      resumePayload = body.resume;
+    } else if (hasResumeShape(body)) {
+      const { templateId: _ti, template_id: _tid, ...rest } = body;
+      resumePayload = rest;
+    } else {
+      resumePayload = loadSampleResume();
+    }
+
+    const rendered = await renderResumeHTML(resumePayload, templateId);
+
+    res.json({
+      code: 0,
+      data: {
+        html: rendered.html,
+        templateId: rendered.metadata?.templateId || templateId,
+        fontWarnings: rendered.metadata?.fontWarnings || [],
+        metadata: rendered.metadata || {},
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ code: 500, msg: e?.message || 'render failed' });
   }
 });
 

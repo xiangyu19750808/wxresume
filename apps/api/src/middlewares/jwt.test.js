@@ -68,7 +68,7 @@ test("attaches user payload when token is valid", () => {
   assert.equal(res.body, null);
   assert.equal(res.statusCode, 200);
   assert.equal(nextCalled, true);
-  assert.deepEqual(req.user, { id: "user-1", role: "user" });
+  assert.deepEqual(req.user, { id: "user-1", role: "user", token });
 });
 
 test("rejects requests when token is invalid or expired", () => {
