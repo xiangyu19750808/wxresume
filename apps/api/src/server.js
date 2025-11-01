@@ -430,4 +430,8 @@ app.post('/v1/match/score', (req, res) => {
 // 启动
 // -------------------------------
 const port = process.env.PORT || 8080;
-app.listen(port, () => console.log(`API listening on ${port}`));
+const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+
+app.listen(port, host, () => {
+  console.log(`API listening on ${host}:${port}`);
+});
