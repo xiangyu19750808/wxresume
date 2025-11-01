@@ -71,7 +71,15 @@ jobs:
       - name: Run tests
         run: pnpm test
 
-      # ✅ 运行 api-check 校验
+  # ✅ 添加 api-check 作业
+  api-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Run API Checks
         run: |
           # 健康检查
@@ -88,6 +96,5 @@ jobs:
 
           # 其他 API 测试...
       
-      # ✅ Lint OpenAPI 校验
       - name: Lint OpenAPI
         run: pnpm -r --if-present api:openapi:lint
