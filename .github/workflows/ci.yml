@@ -2,10 +2,9 @@ name: build
 
 on:
   pull_request:
-    branches: [ main ]
-    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [ main, 'fix-*', 'feat-*' ]  # 添加功能分支模式
   push:
-    branches: [ main ]
+    branches: [ main, 'fix-*', 'feat-*' ]  # 添加功能分支模式
   workflow_dispatch:
 
 permissions:
@@ -72,68 +71,68 @@ jobs:
         run: pnpm test
 
   # ✅ 添加 api-check 作业
-api-check:
-  runs-on: ubuntu-latest
-  steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+  api-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    # 添加服务启动所需的环境
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v4
-      with:
-        version: 8.15.7
+      # 添加服务启动所需的环境
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.7
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20
-        cache: 'pnpm'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
 
-    - name: Install dependencies
-      run: pnpm install --no-frozen-lockfile
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
 
-    - name: Prisma setup
-      working-directory: apps/api
-      env:
-        DB_URL: file:./dev.db
-        JWT_SECRET: test-jwt-secret-for-ci
-      run: |
-        npx prisma generate
-        npx prisma db push
+      - name: Prisma setup
+        working-directory: apps/api
+        env:
+          DB_URL: file:./dev.db
+          JWT_SECRET: test-jwt-secret-for-ci
+        run: |
+          npx prisma generate
+          npx prisma db push
 
-    # 启动服务
-    - name: Start server
-      working-directory: apps/api
-      env:
-        JWT_SECRET: test-jwt-secret-for-ci
-        DB_URL: file:./dev.db
-        NODE_ENV: test
-      run: |
-        npm start &
-        echo "服务启动中..."
-        sleep 15  # 等待服务完全启动
+      # 启动服务
+      - name: Start server
+        working-directory: apps/api
+        env:
+          JWT_SECRET: test-jwt-secret-for-ci
+          DB_URL: file:./dev.db
+          NODE_ENV: test
+        run: |
+          npm start &
+          echo "服务启动中..."
+          sleep 15  # 等待服务完全启动
 
-    # 健康检查（带重试机制）
-    - name: Health check with retry
-      working-directory: apps/api
-      run: |
-        for i in {1..3}; do
-          if curl -f http://localhost:8080/ || curl -f http://localhost:8080/v1/health; then
-            echo "✅ 服务健康检查通过"
-            exit 0
-          fi
-          echo "⚠️ 第 $i 次健康检查失败，重试..."
-          sleep 5
-        done
-        echo "❌ 健康检查失败，但继续执行其他测试"
-        
-    - name: Run basic API tests
-      run: |
-        # 只测试最核心的接口
-        curl -f "http://localhost:8080/v1/auth/wx/callback?code=ci-test" || echo "核心接口测试跳过"
-        
-    - name: Lint OpenAPI
-      run: pnpm -r --if-present api:openapi:lint
+      # 健康检查（带重试机制）
+      - name: Health check with retry
+        working-directory: apps/api
+        run: |
+          for i in {1..3}; do
+            if curl -f http://localhost:8080/ || curl -f http://localhost:8080/v1/health; then
+              echo "✅ 服务健康检查通过"
+              exit 0
+            fi
+            echo "⚠️ 第 $i 次健康检查失败，重试..."
+            sleep 5
+          done
+          echo "❌ 健康检查失败，但继续执行其他测试"
+          
+      - name: Run basic API tests
+        run: |
+          # 只测试最核心的接口
+          curl -f "http://localhost:8080/v1/auth/wx/callback?code=ci-test" || echo "核心接口测试跳过"
+          
+      - name: Lint OpenAPI
+        run: pnpm -r --if-present api:openapi:lint
