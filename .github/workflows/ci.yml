@@ -1,3 +1,4 @@
+cat > .github/workflows/ci.yml << 'EOF'
 name: build
 
 on:
@@ -5,7 +6,7 @@ on:
     branches: [ main ]
     types: [opened, synchronize, reopened, ready_for_review]
   push:
-    branches: [ main ]
+    branches: [ main, 'fix-*', 'feat-*', 'chore-*' ]  # 添加功能分支模式
   workflow_dispatch:
 
 permissions:
@@ -74,3 +75,4 @@ jobs:
       # ✅ 运行 api-check 校验
       - name: Lint OpenAPI
         run: pnpm -r --if-present api:openapi:lint
+EOF
