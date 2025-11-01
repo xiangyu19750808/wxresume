@@ -71,6 +71,30 @@ jobs:
       - name: Run tests
         run: pnpm test
 
-      # ✅ 运行 api-check 校验
+  # ✅ 添加 api-check 作业
+  api-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run API Checks
+        run: |
+          # 健康检查
+          curl http://localhost:8080/v1/health
+          
+          # JD解析接口测试
+          curl -X POST -H "Content-Type: application/json" -d '{"raw_text":"3+years experience, proficient in SQL/Excel, familiar with Tableau, good communication"}' http://localhost:8080/v1/jd/parse
+
+          # 匹配分数接口测试
+          curl -X POST -H "Content-Type: application/json" -d '{"jd_text":"3 years experience, SQL Excel Tableau"}' http://localhost:8080/v1/match/score
+
+          # 渲染接口测试
+          curl -X POST -H "Content-Type: application/json" -d '{"html":"<div style=\"font-size:24px\">Smoke Test PDF</div>"}' http://localhost:8080/v1/render/pdf
+
+          # 其他 API 测试...
+      
       - name: Lint OpenAPI
         run: pnpm -r --if-present api:openapi:lint
