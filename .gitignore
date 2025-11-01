@@ -22,3 +22,4 @@ apps/api/prisma/prisma/
 # Ignore local artifacts
 paid/
 apps/api/paid/
+apps/*/node_modules/

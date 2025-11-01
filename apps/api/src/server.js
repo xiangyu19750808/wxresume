@@ -91,7 +91,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
 const app = express();
 
 // 允许直接访问 files 目录
-const filesDirectory = path.join('C:', 'Users', 'pc', 'wxresume', 'files');  // 使用绝对路径
+const filesDirectory = path.join('/root', 'wxresume', 'files');  // 使用绝对路径
 console.log("Static files directory:", filesDirectory);  // 打印静态文件目录
 app.use('/files', express.static(filesDirectory, { 
   fallthrough: false,  // 如果文件不存在，直接返回 404 错误
@@ -430,4 +430,4 @@ app.post('/v1/match/score', (req, res) => {
 // 启动
 // -------------------------------
 const port = process.env.PORT || 8080;
-app.listen(port, () => console.log(`API listening on ${port}`));
+app.listen(port, '0.0.0.0', '0.0.0.0', () => console.log(`API listening on ${port}`));
