@@ -154,6 +154,23 @@ function generateId(prefix) {
 
 const orderStore = new Map();
 
+// -------------------------------
+// 以下是更新后的冲突部分代码
+// -------------------------------
+
+function normaliseOrderId(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function getOrderById(outTradeNo) {
+  return orderStore.get(normaliseOrderId(outTradeNo));
+}
+
+function saveOrderRecord(order) {
+  if (!order || !order.out_trade_no) return;
+  orderStore.set(normaliseOrderId(order.out_trade_no), order);
+}
+
 function serialiseCallbacks(callbacks = {}) {
   const statuses = {};
   for (const [status, info] of Object.entries(callbacks.statuses || {})) {
@@ -452,7 +469,6 @@ app.get('/v1/results/db', async (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || 'db error' });
   }
 });
-
 // -------------------------------
 // 新增 /v1/order/create 路由
 // -------------------------------
@@ -460,6 +476,19 @@ app.post('/v1/order/create', (req, res) => {
   try {
     const plan = typeof req.body?.plan === 'string' ? req.body.plan.trim() : '';
     const amount = Number.parseInt(req.body?.amount, 10);
+
+    const providedOutTradeNo =
+      typeof req.body?.out_trade_no === 'string'
+        ? req.body.out_trade_no
+        : typeof req.body?.order_id === 'string'
+        ? req.body.order_id
+        : '';
+    const providedPrepayId =
+      typeof req.body?.prepay_id === 'string'
+        ? req.body.prepay_id
+        : typeof req.body?.prepayId === 'string'
+        ? req.body.prepayId
+        : '';
 
     if (!plan) {
       return res.status(400).json({ code: 400, msg: 'plan required' });
@@ -469,21 +498,30 @@ app.post('/v1/order/create', (req, res) => {
       return res.status(400).json({ code: 400, msg: 'amount must be positive integer' });
     }
 
-    const outTradeNo = generateId('wxorder');
-    const prepayId = generateId('prepay');
-    const createdAt = nowIso();
+    const outTradeNo = (providedOutTradeNo && providedOutTradeNo.trim()) || generateId('wxorder');
+    const now = nowIso();
+    const existingOrder = getOrderById(outTradeNo);
+    const prepayId = (providedPrepayId && providedPrepayId.trim()) || existingOrder?.prepay_id || generateId('prepay');
 
-    const order = {
+    const order = existingOrder || {
       out_trade_no: outTradeNo,
       prepay_id: prepayId,
-      plan,
-      amount,
       status: 'created',
-      created_at: createdAt,
+      created_at: now,
       callbacks: { statuses: {} },
     };
 
-    orderStore.set(outTradeNo, order);
+    order.plan = plan;
+    order.amount = amount;
+    order.prepay_id = prepayId;
+    if (!order.callbacks) {
+      order.callbacks = { statuses: {} };
+    }
+    if (!order.created_at) {
+      order.created_at = now;
+    }
+
+    saveOrderRecord(order);
 
     return res.json({ code: 0, data: orderSnapshot(order) });
   } catch (err) {
@@ -497,7 +535,11 @@ app.post('/v1/order/create', (req, res) => {
 // -------------------------------
 app.post('/v1/order/callback', (req, res) => {
   try {
-    const outTradeNo = String(req.body?.out_trade_no || '').trim();
+    const outTradeNoRaw =
+      (typeof req.body?.out_trade_no === 'string' && req.body.out_trade_no) ||
+      (typeof req.body?.order_id === 'string' && req.body.order_id) ||
+      '';
+    const outTradeNo = outTradeNoRaw.trim();
     const result = String(req.body?.result || '').trim().toUpperCase();
     const amount = Number.parseInt(req.body?.amount, 10);
 
@@ -509,7 +551,7 @@ app.post('/v1/order/callback', (req, res) => {
       return res.status(400).json({ code: 400, msg: 'amount must be positive integer' });
     }
 
-    const order = orderStore.get(outTradeNo);
+    const order = getOrderById(outTradeNo);
     if (!order) {
       return res.status(404).json({ code: 404, msg: 'order not found' });
     }
@@ -556,7 +598,7 @@ app.get('/v1/order/status', (req, res) => {
     return res.status(400).json({ code: 400, msg: 'out_trade_no required' });
   }
 
-  const order = orderStore.get(outTradeNo);
+  const order = getOrderById(outTradeNo);
   if (!order) {
     return res.status(404).json({ code: 404, msg: 'order not found' });
   }
@@ -654,6 +696,7 @@ app.post('/v1/analysis/report', (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
   }
 });
+
 
 // -------------------------------
 // 教育背景匹配
@@ -1319,11 +1362,12 @@ app.post('/v1/render/mock', async (_req, res) => {
 });
 
 app.post('/v1/render/pdf', async (req, res) => {
+  let templateId = 'classic';
   try {
     const queryTemplate = req.query.templateId || req.query.template_id;
     const body = req.body || {};
     const bodyTemplate = body.templateId || body.template_id;
-    const templateId = String(queryTemplate || bodyTemplate || 'classic');
+    templateId = String(queryTemplate || bodyTemplate || 'classic');
 
     let resumePayload = {};
     if (hasResumeShape(body.resume)) {
@@ -1349,13 +1393,23 @@ app.post('/v1/render/pdf', async (req, res) => {
     if (rendered.metadata?.fontWarnings?.length) {
       res.setHeader('X-Render-Font-Warnings', rendered.metadata.fontWarnings.join('; '));
     }
+    const resolvedTemplateId = rendered.metadata?.templateId || templateId;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', String(pdf.length));
-    res.setHeader('Content-Disposition', `inline; filename="resume-${rendered.metadata?.templateId || templateId}.pdf"`);
-    res.setHeader('X-Template-Id', rendered.metadata?.templateId || templateId);
+    res.setHeader('Content-Disposition', `inline; filename="resume-${resolvedTemplateId}.pdf"`);
+    res.setHeader('X-Template-Id', resolvedTemplateId);
     res.send(pdf);
   } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'render failed' });
+    if (process.env.DEBUG_RENDER_ERRORS) {
+      console.warn('[render.pdf] failed, returning fallback PDF', e);
+    }
+    const fallbackPdf = await htmlToPDFBuffer('<h1>Resume export temporarily unavailable</h1>');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', String(fallbackPdf.length));
+    res.setHeader('Content-Disposition', `inline; filename="resume-${templateId}.pdf"`);
+    res.setHeader('X-Template-Id', templateId);
+    res.setHeader('X-Render-Fallback', '1');
+    res.send(fallbackPdf);
   }
 });
 
