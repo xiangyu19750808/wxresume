@@ -1641,13 +1641,6 @@ app.post('/v1/education/match', (req, res) => {
 });
 
 // -------------------------------
-// 语言能力评估
-// -------------------------------
-app.post('/v1/language/ability', (req, res) => {
-  try {
-    const payload = req.body || {};
-    const resume = extractResumeFromBody(payload);
-    const job = payload.job || payload.requirements || {};
 
 app.post('/v1/render/pdf', async (req, res) => {
   let templateId = 'classic';
