@@ -154,6 +154,10 @@ function generateId(prefix) {
 
 const orderStore = new Map();
 
+// -------------------------------
+// 以下是更新后的冲突部分代码
+// -------------------------------
+
 function normaliseOrderId(value) {
   return String(value || '').trim().toUpperCase();
 }
@@ -465,7 +469,6 @@ app.get('/v1/results/db', async (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || 'db error' });
   }
 });
-
 // -------------------------------
 // 新增 /v1/order/create 路由
 // -------------------------------
@@ -473,6 +476,7 @@ app.post('/v1/order/create', (req, res) => {
   try {
     const plan = typeof req.body?.plan === 'string' ? req.body.plan.trim() : '';
     const amount = Number.parseInt(req.body?.amount, 10);
+
     const providedOutTradeNo =
       typeof req.body?.out_trade_no === 'string'
         ? req.body.out_trade_no
@@ -692,6 +696,7 @@ app.post('/v1/analysis/report', (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
   }
 });
+
 
 // -------------------------------
 // 教育背景匹配
