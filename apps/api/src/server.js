@@ -154,6 +154,7 @@ function generateId(prefix) {
 
 const orderStore = new Map();
 
+
 function normaliseOrderId(value) {
   return String(value || '').trim().toUpperCase();
 }
@@ -614,7 +615,6 @@ app.get('/v1/results/db', async (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || 'db error' });
   }
 });
-
 // -------------------------------
 // 新增 /v1/order/create 路由
 // -------------------------------
@@ -1566,30 +1566,88 @@ app.get('/v1/health', (req, res) => {
 });
 
 // -------------------------------
-// 模板清单
+// 教育背景匹配
 // -------------------------------
-app.get('/v1/templates', (req, res) => {
+app.post('/v1/education/match', (req, res) => {
   try {
-    const templates = listTemplates();
-    res.json({ code: 0, data: templates });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'error' });
+    const payload = req.body || {};
+    const resume = extractResumeFromBody(payload);
+    const job = payload.job || payload.requirements || {};
+
+    const education = ensureArray(resume.education);
+    const { entry: highestEntry, level: highestLevel } = highestDegreeEntry(education);
+    const requiredDegree = job.requiredDegree || job.degree || job.minDegree;
+    const requiredLevel = degreeLevelOf(requiredDegree);
+
+    let degreeScore;
+    if (!requiredLevel) {
+      degreeScore = 100;
+    } else if (!highestLevel) {
+      degreeScore = 30;
+    } else if (highestLevel >= requiredLevel) {
+      degreeScore = 100;
+    } else {
+      const deficit = requiredLevel - highestLevel;
+      degreeScore = clampScore(70 - deficit * 25);
+    }
+
+    const majorsRequired = ensureArray(job.preferredMajors || job.majors || job.major).map(String).filter(Boolean);
+    const resumeMajors = education
+      .map((item) => item.area || item.major || item.fieldOfStudy || item.discipline)
+      .filter(Boolean);
+    const matchedMajors = majorsRequired.filter((major) =>
+      resumeMajors.some(
+        (candidate) => includesNormalized(candidate, major) || includesNormalized(major, candidate)
+      )
+    );
+
+    const majorScore = majorsRequired.length
+      ? clampScore((matchedMajors.length / majorsRequired.length) * 100)
+      : 100;
+
+    const overallScore = clampScore(degreeScore * 0.6 + majorScore * 0.4);
+
+    const suggestions = [];
+    if (requiredLevel && highestLevel < requiredLevel) {
+      suggestions.push(`补充学历/证书：目标岗位期望${requiredDegree || '更高学历'}`);
+    }
+    if (majorsRequired.length && matchedMajors.length < majorsRequired.length) {
+      const missingMajors = majorsRequired
+        .filter((major) => !matchedMajors.includes(major))
+        .slice(0, 2)
+        .join('、');
+      if (missingMajors) {
+        suggestions.push(`在简历中加强相关课程或项目：突出${missingMajors}`);
+      }
+    }
+    if (!suggestions.length) {
+      suggestions.push('保持教育背景优势，并在面试中突出专业课程实践');
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        score: overallScore,
+        degreeScore: clampScore(degreeScore),
+        majorScore,
+        highestDegree: highestEntry?.studyType || highestEntry?.degree || null,
+        matchedMajors,
+        suggestions,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ code: 500, msg: err?.message || 'education match failed' });
   }
 });
 
 // -------------------------------
-// 渲染：resume -> HTML -> PDF
+// 语言能力评估
 // -------------------------------
-app.post('/v1/render/mock', async (_req, res) => {
+app.post('/v1/language/ability', (req, res) => {
   try {
-    const resume = loadSampleResume();
-    const { html, metadata } = await renderResumeHTML(resume, 'classic');
-    const buf = await htmlToPDFBuffer(html);
-    res.json({ code: 0, data: { bytes: buf.length, templateId: metadata?.templateId || 'classic' } });
-  } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'error' });
-  }
-});
+    const payload = req.body || {};
+    const resume = extractResumeFromBody(payload);
+    const job = payload.job || payload.requirements || {};
 
 app.post('/v1/render/pdf', async (req, res) => {
   let templateId = 'classic';
