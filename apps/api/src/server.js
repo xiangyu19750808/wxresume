@@ -154,6 +154,10 @@ function generateId(prefix) {
 
 const orderStore = new Map();
 
+// -------------------------------
+// 以下是更新后的冲突部分代码
+// -------------------------------
+
 function normaliseOrderId(value) {
   return String(value || '').trim().toUpperCase();
 }
@@ -294,6 +298,20 @@ function serialiseCallbacks(callbacks = {}) {
     statuses: normalised.statuses,
     last_result: normalised.last_result,
     last_received_at: normalised.last_received_at,
+function saveOrderRecord(order) {
+  if (!order || !order.out_trade_no) return;
+  orderStore.set(normaliseOrderId(order.out_trade_no), order);
+}
+
+function serialiseCallbacks(callbacks = {}) {
+  const statuses = {};
+  for (const [status, info] of Object.entries(callbacks.statuses || {})) {
+    statuses[status] = { ...info };
+  }
+  return {
+    last_result: callbacks.last_result,
+    last_received_at: callbacks.last_received_at,
+    statuses,
   };
 }
 
@@ -583,7 +601,6 @@ app.get('/v1/results/db', async (req, res) => {
     res.status(500).json({ code: 500, msg: e?.message || 'db error' });
   }
 });
-
 // -------------------------------
 // 新增 /v1/order/create 路由
 // -------------------------------
@@ -591,6 +608,11 @@ app.post('/v1/order/create', async (req, res) => {
   try {
     const plan = typeof req.body?.plan === 'string' ? req.body.plan.trim() : '';
     const amount = Number.parseInt(req.body?.amount, 10);
+app.post('/v1/order/create', (req, res) => {
+  try {
+    const plan = typeof req.body?.plan === 'string' ? req.body.plan.trim() : '';
+    const amount = Number.parseInt(req.body?.amount, 10);
+
     const providedOutTradeNo =
       typeof req.body?.out_trade_no === 'string'
         ? req.body.out_trade_no
@@ -681,6 +703,32 @@ app.post('/v1/order/create', async (req, res) => {
     const snapshot = orderSnapshot(saveOrderRecord(order));
 
     return res.json({ code: 0, data: snapshot });
+    const outTradeNo = (providedOutTradeNo && providedOutTradeNo.trim()) || generateId('wxorder');
+    const now = nowIso();
+    const existingOrder = getOrderById(outTradeNo);
+    const prepayId = (providedPrepayId && providedPrepayId.trim()) || existingOrder?.prepay_id || generateId('prepay');
+
+    const order = existingOrder || {
+      out_trade_no: outTradeNo,
+      prepay_id: prepayId,
+      status: 'created',
+      created_at: now,
+      callbacks: { statuses: {} },
+    };
+
+    order.plan = plan;
+    order.amount = amount;
+    order.prepay_id = prepayId;
+    if (!order.callbacks) {
+      order.callbacks = { statuses: {} };
+    }
+    if (!order.created_at) {
+      order.created_at = now;
+    }
+
+    saveOrderRecord(order);
+
+    return res.json({ code: 0, data: orderSnapshot(order) });
   } catch (err) {
     console.error('[order.create] failed', err);
     return res.status(500).json({ code: 500, msg: 'order create failed' });
@@ -691,12 +739,14 @@ app.post('/v1/order/create', async (req, res) => {
 // 新增 /v1/order/callback 路由
 // -------------------------------
 app.post('/v1/order/callback', async (req, res) => {
+app.post('/v1/order/callback', (req, res) => {
   try {
     const outTradeNoRaw =
       (typeof req.body?.out_trade_no === 'string' && req.body.out_trade_no) ||
       (typeof req.body?.order_id === 'string' && req.body.order_id) ||
       '';
     const outTradeNo = normaliseOrderId(outTradeNoRaw.trim());
+    const outTradeNo = outTradeNoRaw.trim();
     const result = String(req.body?.result || '').trim().toUpperCase();
     const amount = Number.parseInt(req.body?.amount, 10);
 
@@ -777,6 +827,32 @@ app.post('/v1/order/callback', async (req, res) => {
       }
     }
 
+    const order = getOrderById(outTradeNo);
+    if (!order) {
+      return res.status(404).json({ code: 404, msg: 'order not found' });
+    }
+
+    const receivedAt = nowIso();
+    const callbacks = order.callbacks || { statuses: {} };
+    const statusEntry = callbacks.statuses[result] || {};
+    statusEntry.count = (statusEntry.count || 0) + 1;
+    statusEntry.last_amount = amount;
+    statusEntry.last_received_at = receivedAt;
+    callbacks.statuses[result] = statusEntry;
+    callbacks.last_result = result;
+    callbacks.last_received_at = receivedAt;
+    order.callbacks = callbacks;
+
+    let statusChanged = false;
+    if (result === 'SUCCESS' && order.status !== 'paid') {
+      order.status = 'paid';
+      order.paid_at = receivedAt;
+      statusChanged = true;
+    } else if (result === 'FAIL' && order.status === 'created') {
+      order.status = 'failed';
+      statusChanged = true;
+    }
+
     return res.json({
       code: 0,
       data: {
@@ -789,6 +865,18 @@ app.post('/v1/order/callback', async (req, res) => {
   } catch (err) {
     console.error('[order.callback] failed', err);
     return res.status(500).json({ code: 500, msg: 'order callback failed' });
+  }
+});
+
+app.get('/v1/order/status', (req, res) => {
+  const outTradeNo = String(req.query?.out_trade_no || '').trim();
+  if (!outTradeNo) {
+    return res.status(400).json({ code: 400, msg: 'out_trade_no required' });
+  }
+
+  const order = getOrderById(outTradeNo);
+  if (!order) {
+    return res.status(404).json({ code: 404, msg: 'order not found' });
   }
 });
 
@@ -894,6 +982,623 @@ app.post('/v1/analysis/report', (req, res) => {
     res.json({ code: 0, data: { radar, recommendations } });
   } catch (e) {
     res.status(500).json({ code: 500, msg: e?.message || 'error' });
+  }
+});
+
+
+// -------------------------------
+// 教育背景匹配
+// -------------------------------
+app.post('/v1/education/match', (req, res) => {
+  try {
+    const payload = req.body || {};
+    const resume = extractResumeFromBody(payload);
+    const job = payload.job || payload.requirements || {};
+
+    const education = ensureArray(resume.education);
+    const { entry: highestEntry, level: highestLevel } = highestDegreeEntry(education);
+    const requiredDegree = job.requiredDegree || job.degree || job.minDegree;
+    const requiredLevel = degreeLevelOf(requiredDegree);
+
+    let degreeScore;
+    if (!requiredLevel) {
+      degreeScore = 100;
+    } else if (!highestLevel) {
+      degreeScore = 30;
+    } else if (highestLevel >= requiredLevel) {
+      degreeScore = 100;
+    } else {
+      const deficit = requiredLevel - highestLevel;
+      degreeScore = clampScore(70 - deficit * 25);
+    }
+
+    const majorsRequired = ensureArray(job.preferredMajors || job.majors || job.major).map(String).filter(Boolean);
+    const resumeMajors = education
+      .map((item) => item.area || item.major || item.fieldOfStudy || item.discipline)
+      .filter(Boolean);
+    const matchedMajors = majorsRequired.filter((major) =>
+      resumeMajors.some(
+        (candidate) => includesNormalized(candidate, major) || includesNormalized(major, candidate)
+      )
+    );
+
+    const majorScore = majorsRequired.length
+      ? clampScore((matchedMajors.length / majorsRequired.length) * 100)
+      : 100;
+
+    const overallScore = clampScore(degreeScore * 0.6 + majorScore * 0.4);
+
+    const suggestions = [];
+    if (requiredLevel && highestLevel < requiredLevel) {
+      suggestions.push(`补充学历/证书：目标岗位期望${requiredDegree || '更高学历'}`);
+    }
+    if (majorsRequired.length && matchedMajors.length < majorsRequired.length) {
+      const missingMajors = majorsRequired
+        .filter((major) => !matchedMajors.includes(major))
+        .slice(0, 2)
+        .join('、');
+      if (missingMajors) {
+        suggestions.push(`在简历中加强相关课程或项目：突出${missingMajors}`);
+      }
+    }
+    if (!suggestions.length) {
+      suggestions.push('保持教育背景优势，并在面试中突出专业课程实践');
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        score: overallScore,
+        degreeScore: clampScore(degreeScore),
+        majorScore,
+        highestDegree: highestEntry?.studyType || highestEntry?.degree || null,
+        matchedMajors,
+        suggestions,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ code: 500, msg: err?.message || 'education match failed' });
+  }
+});
+
+// -------------------------------
+// 语言能力评估
+// -------------------------------
+app.post('/v1/language/ability', (req, res) => {
+  try {
+    const payload = req.body || {};
+    const resume = extractResumeFromBody(payload);
+    const job = payload.job || payload.requirements || {};
+
+    const resumeLanguages = ensureArray(resume.languages || resume.language).map((entry) => {
+      const name = entry?.name || entry?.language;
+      const level = entry?.level || entry?.proficiency || entry?.grade;
+      const numericScore = Number.parseFloat(entry?.score ?? entry?.examScore ?? entry?.points ?? entry?.value);
+      return {
+        name: name || '',
+        level,
+        score: Number.isFinite(numericScore) ? numericScore : null,
+      };
+    });
+
+    const requirements = ensureArray(
+      job.requirements || job.languageRequirements || job.languages || job.expectedLanguages
+    )
+      .map((reqItem) => ({
+        language: reqItem?.language || reqItem?.name || reqItem?.code || '',
+        level: reqItem?.level || reqItem?.requiredLevel,
+        minScore:
+          reqItem?.minScore ?? reqItem?.minimumScore ?? reqItem?.score ?? reqItem?.min_points ?? reqItem?.min,
+      }))
+      .filter((item) => item.language);
+
+    const evaluations = [];
+    const suggestions = [];
+
+    for (const requirement of requirements) {
+      const languageKey = normalizeString(requirement.language);
+      const resumeEntry = resumeLanguages.find((lang) => {
+        const langName = normalizeString(lang.name);
+        return langName && (langName.includes(languageKey) || languageKey.includes(langName));
+      });
+
+      const requiredLevelValue = languageLevelOf(requirement.level);
+      let levelScore = null;
+      if (requiredLevelValue) {
+        if (resumeEntry) {
+          const entryLevel = languageLevelOf(resumeEntry.level);
+          if (entryLevel >= requiredLevelValue) {
+            levelScore = 100;
+          } else if (entryLevel > 0) {
+            levelScore = clampScore(70 - (requiredLevelValue - entryLevel) * 20);
+          } else {
+            levelScore = 35;
+          }
+        } else {
+          levelScore = 30;
+        }
+      }
+
+      const minScore = Number.isFinite(requirement.minScore)
+        ? Number(requirement.minScore)
+        : null;
+      let examScore = null;
+      if (minScore !== null) {
+        if (resumeEntry?.score !== null && resumeEntry?.score !== undefined) {
+          if (resumeEntry.score >= minScore) {
+            examScore = 100;
+          } else {
+            const gapRatio = (minScore - resumeEntry.score) / Math.max(minScore, 1);
+            examScore = clampScore(65 - gapRatio * 60);
+          }
+        } else {
+          examScore = 40;
+        }
+      }
+
+      const combinedScore = weightedScore(
+        [
+          levelScore === null ? null : { score: levelScore, weight: 0.6 },
+          examScore === null ? null : { score: examScore, weight: 0.4 },
+        ].filter(Boolean)
+      );
+
+      if (!resumeEntry) {
+        suggestions.push(`补充${requirement.language}能力或证书以满足岗位要求`);
+      } else {
+        if (requiredLevelValue && levelScore !== null && levelScore < 80) {
+          suggestions.push(`提升${requirement.language}水平至${requirement.level || '更高等级'}`);
+        }
+        if (minScore !== null && examScore !== null && examScore < 80) {
+          suggestions.push(`强化考试成绩：${requirement.language} 至少 ${minScore}`);
+        }
+      }
+
+      evaluations.push({
+        language: requirement.language,
+        matched: combinedScore >= 80,
+        score: combinedScore,
+        levelScore: levelScore === null ? undefined : levelScore,
+        examScore: examScore === null ? undefined : examScore,
+      });
+    }
+
+    const overallScore = requirements.length
+      ? clampScore(evaluations.reduce((sum, item) => sum + item.score, 0) / requirements.length)
+      : clampScore(resumeLanguages.length ? 90 : 60);
+
+    if (!suggestions.length) {
+      suggestions.push('语言能力满足要求，可准备语言相关的面试案例');
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        score: overallScore,
+        evaluations,
+        suggestions: Array.from(new Set(suggestions)).slice(0, 4),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ code: 500, msg: err?.message || 'language ability failed' });
+  }
+});
+
+// -------------------------------
+// 工作经历匹配
+// -------------------------------
+app.post('/v1/experience/match', (req, res) => {
+  try {
+    const payload = req.body || {};
+    const resume = extractResumeFromBody(payload);
+    const job = payload.job || payload.requirements || {};
+
+    const fields = ensureArray(job.fields || job.domains || job.focusAreas || job.industries)
+      .map((item) => normalizeString(item))
+      .filter(Boolean);
+    const workEntries = ensureArray(resume.work);
+
+    let totalYears = 0;
+    let relevantYears = 0;
+    const details = [];
+
+    for (const entry of workEntries) {
+      const durationYears = Number.isFinite(entry?.years)
+        ? Number(entry.years)
+        : yearsBetween(entry?.startDate || entry?.start || entry?.from, entry?.endDate || entry?.end || entry?.until);
+      const safeYears = Number.isFinite(durationYears) ? Math.max(durationYears, 0) : 0;
+      totalYears += safeYears;
+
+      const textParts = [
+        entry?.company,
+        entry?.position,
+        entry?.summary,
+        entry?.industry,
+        ...(ensureArray(entry?.industries) || []),
+        ...(ensureArray(entry?.highlights) || []),
+        ...(ensureArray(entry?.responsibilities) || []),
+      ].filter(Boolean);
+      const combinedText = textParts.map((part) => String(part)).join(' ').toLowerCase();
+      const matchedFields = fields.filter((field) => combinedText.includes(field));
+      const isRelevant = !fields.length || matchedFields.length > 0;
+      if (isRelevant) {
+        relevantYears += safeYears;
+      }
+
+      details.push({
+        company: entry?.company || null,
+        position: entry?.position || null,
+        years: Number(safeYears.toFixed(2)),
+        matchedFields,
+      });
+    }
+
+    const requiredYears = [job.requiredYears, job.minYears, job.years, job.minimumYears]
+      .map((value) => (Number.isFinite(value) ? Number(value) : null))
+      .find((value) => value !== null) || 0;
+
+    const denominator = requiredYears || totalYears || 1;
+    const baseScore = denominator ? Math.min(1, relevantYears / denominator) : 0;
+    const score = clampScore(baseScore * 100);
+
+    const suggestions = [];
+    if (requiredYears && relevantYears < requiredYears) {
+      suggestions.push(`补充与岗位相关的项目案例，突出至少 ${requiredYears} 年经验`);
+    }
+    if (fields.length && relevantYears === 0) {
+      suggestions.push(`强调与领域「${fields.join('、')}」相关的成果与技能`);
+    }
+    if (!suggestions.length) {
+      suggestions.push('工作经历与岗位要求匹配，可准备典型项目复盘');
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        score,
+        relevantYears: Number(relevantYears.toFixed(2)),
+        totalYears: Number(totalYears.toFixed(2)),
+        details,
+        suggestions,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ code: 500, msg: err?.message || 'experience match failed' });
+  }
+});
+
+// -------------------------------
+// 关键词频次分析
+// -------------------------------
+app.post('/v1/keywords/frequency_analysis', (req, res) => {
+  try {
+    const payload = req.body || {};
+    const resume = extractResumeFromBody(payload);
+    const resumeText =
+      payload.resume_text || payload.resumeText || payload.resumeTextContent || resumeToPlainText(resume);
+    const jdText = payload.jd_text || payload.jdText || payload.job_text || '';
+    const keywords = ensureArray(payload.jd_keywords || payload.keywords || payload.jobKeywords)
+      .map((kw) => String(kw).trim())
+      .filter(Boolean);
+
+    const frequencies = keywords.map((keyword) => {
+      const regex = new RegExp(`\\b${escapeRegExp(keyword)}\\b`, 'gi');
+      const resumeCount = resumeText ? (resumeText.match(regex) || []).length : 0;
+      const jdCount = jdText ? (jdText.match(regex) || []).length : 0;
+      return { keyword, resumeCount, jdCount };
+    });
+
+    const matchedKeywords = frequencies.filter((item) => item.resumeCount > 0);
+    const score = keywords.length ? clampScore((matchedKeywords.length / keywords.length) * 100) : 100;
+
+    const suggestions = keywords
+      .filter((keyword) => !matchedKeywords.some((item) => item.keyword === keyword))
+      .slice(0, 3)
+      .map((keyword) => `考虑在简历中补充与「${keyword}」相关的经历或成果`);
+    if (!suggestions.length) {
+      suggestions.push('关键词覆盖良好，可继续量化成果以增强说服力');
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        score,
+        frequencies,
+        resumeLength: resumeText.length,
+        suggestions,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ code: 500, msg: err?.message || 'keyword frequency failed' });
+  }
+});
+
+// -------------------------------
+// 语义上下文分析
+// -------------------------------
+app.post('/v1/keywords/contextual_analysis', (req, res) => {
+  try {
+    const payload = req.body || {};
+    const resume = extractResumeFromBody(payload);
+    const resumeText =
+      payload.resume_text || payload.resumeText || payload.resumeTextContent || resumeToPlainText(resume);
+    const jdText = payload.jd_text || payload.jdText || payload.job_text || '';
+
+    const similarity = cosineSimilarity(resumeText, jdText);
+    const score = clampScore(similarity > 0 ? 40 + similarity * 60 : 0);
+
+    const resumeTokens = new Set(tokenize(resumeText));
+    const jdTokens = new Set(tokenize(jdText));
+    const overlapTokens = [...resumeTokens].filter((token) => jdTokens.has(token)).slice(0, 12);
+
+    const suggestions = [];
+    if (!resumeText || !jdText) {
+      suggestions.push('提供完整的简历与岗位描述文本以获得准确语义分析');
+    }
+    if (score < 60) {
+      suggestions.push('强化与岗位职责相关的案例描述，提升语义匹配度');
+    }
+    if (!suggestions.length) {
+      suggestions.push('语义匹配良好，可准备面试故事深化理解');
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        score,
+        similarity,
+        overlapTokens,
+        suggestions,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ code: 500, msg: err?.message || 'context analysis failed' });
+  }
+});
+
+// -------------------------------
+// 职位职责匹配
+// -------------------------------
+app.post('/v1/job/responsibilities_match', (req, res) => {
+  try {
+    const payload = req.body || {};
+    const resume = extractResumeFromBody(payload);
+    const job = payload.job || payload.requirements || {};
+
+    const responsibilities = ensureArray(job.responsibilities || job.duties || job.expectations)
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+
+    const resumeResponsibilities = [];
+    for (const work of ensureArray(resume.work)) {
+      if (work?.summary) resumeResponsibilities.push(String(work.summary));
+      resumeResponsibilities.push(...ensureArray(work?.highlights).map((item) => String(item)));
+      resumeResponsibilities.push(...ensureArray(work?.responsibilities).map((item) => String(item)));
+    }
+    if (resume.summary) {
+      resumeResponsibilities.push(String(resume.summary));
+    }
+
+    const evaluation = responsibilities.map((resp) => {
+      const respTokens = new Set(tokenize(resp));
+      let matchedEntry = null;
+      let bestRatio = 0;
+
+      for (const entry of resumeResponsibilities) {
+        const entryTokens = new Set(tokenize(entry));
+        if (!entryTokens.size) continue;
+        const intersection = [...respTokens].filter((token) => entryTokens.has(token));
+        const ratio = respTokens.size ? intersection.length / respTokens.size : 0;
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          matchedEntry = entry;
+        }
+        if (ratio >= 0.6 || includesNormalized(entry, resp)) {
+          bestRatio = ratio || 1;
+          matchedEntry = entry;
+          break;
+        }
+      }
+
+      const matched = Boolean(matchedEntry) && (bestRatio >= 0.35 || includesNormalized(matchedEntry, resp));
+
+      return {
+        responsibility: resp,
+        matched,
+        overlapRatio: Number(bestRatio.toFixed(2)),
+        matchedEntry: matchedEntry || null,
+      };
+    });
+
+    const matchedCount = evaluation.filter((item) => item.matched).length;
+    const score = responsibilities.length ? clampScore((matchedCount / responsibilities.length) * 100) : 100;
+
+    const suggestions = responsibilities
+      .filter((resp) => !evaluation.find((item) => item.matched && item.responsibility === resp))
+      .slice(0, 3)
+      .map((resp) => `补充与岗位职责「${resp}」相关的业绩或案例`);
+    if (!suggestions.length) {
+      suggestions.push('职责匹配良好，可准备量化成果以进一步加分');
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        score,
+        evaluation,
+        suggestions,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ code: 500, msg: err?.message || 'responsibilities match failed' });
+  }
+});
+
+// -------------------------------
+// 行业适配度分析
+// -------------------------------
+app.post('/v1/industry/fit', (req, res) => {
+  try {
+    const payload = req.body || {};
+    const resume = extractResumeFromBody(payload);
+    const job = payload.job || payload.target || {};
+
+    const jobIndustry = job.industry || job.targetIndustry || job.sector || payload.industry || '';
+    const related = ensureArray(
+      job.relatedIndustries || job.similarIndustries || job.related || job.secondaryIndustries
+    ).map(String);
+
+    const resumeIndustries = [];
+    for (const work of ensureArray(resume.work)) {
+      if (work?.industry) resumeIndustries.push(String(work.industry));
+      resumeIndustries.push(...ensureArray(work?.industries).map((item) => String(item)));
+      if (work?.companyIndustry) resumeIndustries.push(String(work.companyIndustry));
+    }
+    if (resume?.industry) {
+      resumeIndustries.push(String(resume.industry));
+    }
+
+    const normalizedIndustries = resumeIndustries.filter(Boolean);
+
+    const exactMatch = jobIndustry
+      ? normalizedIndustries.some(
+          (item) => includesNormalized(item, jobIndustry) || includesNormalized(jobIndustry, item)
+        )
+      : false;
+    const relatedMatch = related.some((rel) =>
+      normalizedIndustries.some((item) => includesNormalized(item, rel) || includesNormalized(rel, item))
+    );
+
+    let score;
+    if (!jobIndustry) {
+      score = normalizedIndustries.length ? 90 : 70;
+    } else if (exactMatch) {
+      score = 100;
+    } else if (relatedMatch) {
+      score = 80;
+    } else if (normalizedIndustries.length) {
+      score = 55;
+    } else {
+      score = 40;
+    }
+
+    const suggestions = [];
+    if (!jobIndustry) {
+      suggestions.push('岗位未明确行业，可在沟通中确认具体方向');
+    } else if (!exactMatch) {
+      suggestions.push(`在简历中强化与${jobIndustry}行业相关的经验或案例`);
+    }
+    if (!normalizedIndustries.length) {
+      suggestions.push('补充过往项目或公司所属行业信息，提升可读性');
+    }
+    if (!suggestions.length) {
+      suggestions.push('行业匹配度高，可准备行业趋势与洞察分享');
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        score: clampScore(score),
+        jobIndustry: jobIndustry || null,
+        resumeIndustries: normalizedIndustries,
+        relatedMatch,
+        suggestions,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ code: 500, msg: err?.message || 'industry fit failed' });
+  }
+});
+
+// -------------------------------
+// 薪资匹配度分析
+// -------------------------------
+app.post('/v1/salary/fit', (req, res) => {
+  try {
+    const payload = req.body || {};
+    const resume = extractResumeFromBody(payload);
+    const job = payload.job || payload.target || {};
+
+    const expectation = parseSalaryExpectation(resume);
+    const range =
+      parseSalaryRange(job.salaryRange || job.salary || payload.salaryRange || payload.salary) || null;
+
+    const suggestions = [];
+
+    if (!expectation) {
+      if (!range) {
+        suggestions.push('补充薪资期望信息以便评估合理性');
+        return res.json({
+          code: 0,
+          data: {
+            score: 60,
+            expectation: null,
+            range: null,
+            suggestions,
+          },
+        });
+      }
+
+      suggestions.push('补充薪资期望信息以便评估合理性');
+      return res.json({
+        code: 0,
+        data: {
+          score: 60,
+          expectation: null,
+          range,
+          suggestions,
+        },
+      });
+    }
+
+    if (!range) {
+      suggestions.push('岗位未提供薪资范围，可在沟通中确认以便谈判');
+      return res.json({
+        code: 0,
+        data: {
+          score: 90,
+          expectation,
+          range: null,
+          suggestions,
+        },
+      });
+    }
+
+    if (range.currency && expectation.currency && range.currency !== expectation.currency) {
+      suggestions.push('注意岗位薪资币种与期望不一致，需明确换算方式');
+    }
+
+    const expectedAmount = Number(expectation.amountAnnual);
+    const min = Number(range.min);
+    const max = Number(range.max);
+
+    let score;
+    if (expectedAmount >= min && expectedAmount <= max) {
+      score = 100;
+      if (!suggestions.length) {
+        suggestions.push('薪资期望与岗位范围匹配，可准备谈判亮点');
+      }
+    } else if (expectedAmount < min) {
+      const diffRatio = min ? (min - expectedAmount) / min : 1;
+      score = clampScore(100 - diffRatio * 120);
+      suggestions.push(`薪资期望略低于岗位下限，可考虑调整至≥${min}`);
+    } else {
+      const diffRatio = max ? (expectedAmount - max) / max : 1;
+      score = clampScore(100 - diffRatio * 120);
+      suggestions.push('薪资期望高于岗位上限，建议结合价值点协商或适度下调');
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        score,
+        expectation,
+        range,
+        suggestions,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ code: 500, msg: err?.message || 'salary fit failed' });
   }
 });
 
