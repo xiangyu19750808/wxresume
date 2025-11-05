@@ -169,6 +169,13 @@ function normaliseTimestamp(value) {
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (!trimmed) return undefined;
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) {
+      const milliseconds =
+        trimmed.length > 11 || Math.abs(numeric) > 1e11 ? numeric : numeric * 1000;
+      const fromNumeric = new Date(milliseconds);
+      if (!Number.isNaN(fromNumeric.getTime())) return fromNumeric.toISOString();
+    }
     const asDate = new Date(trimmed);
     if (!Number.isNaN(asDate.getTime())) return asDate.toISOString();
     return trimmed;
@@ -180,6 +187,39 @@ function getOrderById(outTradeNo) {
   return orderStore.get(normaliseOrderId(outTradeNo));
 }
 
+function normaliseCallbackState(callbacks = {}) {
+  if (!callbacks || typeof callbacks !== 'object') {
+    return { statuses: {} };
+  }
+
+  const statuses = {};
+  for (const [status, info] of Object.entries(callbacks.statuses || {})) {
+    const entry = {
+      ...(info && typeof info === 'object' ? info : {}),
+    };
+    const normalisedLastReceived = normaliseTimestamp(info?.last_received_at);
+    if (normalisedLastReceived) {
+      entry.last_received_at = normalisedLastReceived;
+    } else if (info && Object.prototype.hasOwnProperty.call(info, 'last_received_at')) {
+      entry.last_received_at = info.last_received_at;
+    }
+    statuses[status] = entry;
+  }
+
+  const result = {
+    statuses,
+  };
+
+  if (callbacks.last_result) {
+    result.last_result = callbacks.last_result;
+  }
+  if (callbacks.last_received_at) {
+    result.last_received_at = normaliseTimestamp(callbacks.last_received_at);
+  }
+
+  return result;
+}
+
 function saveOrderRecord(order) {
   if (!order || !order.out_trade_no) return order;
   const key = normaliseOrderId(order.out_trade_no);
@@ -188,6 +228,7 @@ function saveOrderRecord(order) {
     out_trade_no: key,
     created_at: normaliseTimestamp(order.created_at) || nowIso(),
     paid_at: normaliseTimestamp(order.paid_at),
+    callbacks: normaliseCallbackState(order.callbacks),
   };
   orderStore.set(key, record);
   return record;
@@ -248,14 +289,11 @@ async function loadOrderFromDb(outTradeNo) {
 }
 
 function serialiseCallbacks(callbacks = {}) {
-  const statuses = {};
-  for (const [status, info] of Object.entries(callbacks.statuses || {})) {
-    statuses[status] = { ...info };
-  }
+  const normalised = normaliseCallbackState(callbacks);
   return {
-    last_result: callbacks.last_result,
-    last_received_at: callbacks.last_received_at,
-    statuses,
+    statuses: normalised.statuses,
+    last_result: normalised.last_result,
+    last_received_at: normalised.last_received_at,
   };
 }
 
