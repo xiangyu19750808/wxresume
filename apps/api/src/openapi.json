@@ -721,6 +721,168 @@
         }
       }
     },
+    "/v1/check": {
+      "post": {
+        "summary": "Resume and JD screening (placeholder)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resumeText": { "type": "string" },
+                  "jdText": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
+    "/v1/analysis/diagnose": {
+      "post": {
+        "summary": "Quick nine-dimension diagnose (placeholder)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "scores": { "type": "array", "items": { "type": "number" } },
+                    "anxietyCopy": { "type": "string" },
+                    "radar": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/analysis/deep": {
+      "post": {
+        "summary": "Deep analysis with optimization directives (placeholder)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dimensions": { "type": "array", "items": { "type": "number" } },
+                    "optimizationDirectives": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/resume/optimize": {
+      "post": {
+        "summary": "Resume optimization (placeholder)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "optimized_resume": { "type": "string" },
+                    "original_score": { "type": "number" },
+                    "optimized_score": { "type": "number" },
+                    "key_improvements": { "type": "array", "items": { "type": "string" } },
+                    "applied_changes": { "type": "array", "items": { "type": "object" } },
+                    "expected_pass_rate_increase": { "type": "string" },
+                    "risk_eliminated": { "type": "array", "items": { "type": "string" } },
+                    "checklist": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/resume/export": {
+      "post": {
+        "summary": "Resume export to PDF (placeholder)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fileId": { "type": "string" },
+                    "url": { "type": "string", "format": "uri" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/results": {
+      "get": {
+        "summary": "List stored results (placeholder)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": { "type": "array", "items": { "type": "object" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/results/{rid}": {
+      "get": {
+        "summary": "Get stored result by id (placeholder)",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "not found" }
+        }
+      }
+    },
     "/v1/openapi.json": {
       "get": {
         "summary": "Serve OpenAPI spec",
