@@ -4,6 +4,10 @@ import helmet from 'helmet';
 import fs from 'node:fs';
 import path from 'node:path';
 import jwt from 'jsonwebtoken';
+import { parseJD } from './check/parsers/jd.parser.js';
+import { parseResumeFromFile, fromPlainText } from './check/parsers/resume.parser.js';
+import { ScreeningService } from './check/services/screening.service.js';
+import { OptimizeController } from './resume/controller/optimize.controller.js';
 
 import { createUsersRouter } from './modules/users/index.js';
 import { createFileRouter } from './modules/file/index.js';
@@ -37,6 +41,21 @@ const REPO_ROOT = (() => {
   if (fs.existsSync(path.join(candidate, 'data'))) return candidate;
   return APP_CWD;
 })();
+const UPLOAD_DIR = path.join(REPO_ROOT, 'tmp', 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const multerPromise = import('multer')
+  .then((m) => m.default || m)
+  .then((multer) => multer({ dest: UPLOAD_DIR }))
+  .catch((err) => {
+    console.warn('[check] multer unavailable, file upload fallback to JSON only', err?.message || err);
+    return null;
+  });
+let uploadResumeMiddleware = (req, res, next) => next();
+multerPromise.then((instance) => {
+  if (instance) uploadResumeMiddleware = instance.single('resumeFile');
+});
+const screeningService = new ScreeningService();
+const optimizeController = new OptimizeController();
 const SAMPLE_RESUME_PATH = path.join(REPO_ROOT, 'samples/resume/alice.json');
 
 function loadSampleResume() {
@@ -1695,32 +1714,90 @@ app.post('/v1/render/pdf', async (req, res) => {
 });
 
 // -------------------------------
-// JD 解析占位：data/jd_dict_zh.json 简单匹配
+// JD 结构化解析
 // -------------------------------
 app.post('/v1/jd/parse', (req, res) => {
   try {
-    const { raw_text = '' } = req.body || {};
-    const dictPath = path.join(REPO_ROOT, 'data/jd_dict_zh.json');
-    const dict = JSON.parse(fs.readFileSync(dictPath, 'utf-8'));
-    const text = String(raw_text);
+    const { jdText = req.body?.raw_text || '' } = req.body || {};
+    const text = String(jdText || '').trim();
 
-    const hit = (list = []) => list.filter((w) => text.includes(w));
-    const keywords = Array.from(new Set([...(hit(dict.skills || [])), ...(hit(dict.soft || []))]));
+    if (!text) {
+      return res.status(400).json({ code: 400, msg: 'jdText required', data: null });
+    }
 
-    const result = {
-      jd_id: 'demo-' + Date.now(),
-      keywords,
-      requirements: {
-        must: hit(dict.skills || []),
-        nice: hit(dict.soft || []),
-        exp_years: (dict.exp_years_tokens || []).find((t) => text.includes(t)) || null,
-      },
-    };
-    res.json({ code: 0, data: result });
+    const parsed = parseJD(text);
+    return res.json({ code: 0, msg: 'ok', data: parsed });
   } catch (e) {
-    res.status(500).json({ code: 500, msg: e?.message || 'error' });
+    return res.status(500).json({ code: 500, msg: e?.message || 'error' });
   }
 });
+
+// -------------------------------
+// 筛查入口：支持 JSON + multipart/form-data
+// -------------------------------
+app.post('/v1/check', async (req, res) => {
+  await multerPromise;
+  uploadResumeMiddleware(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({
+        code: 1,
+        msg: '文件上传失败',
+        data: { status: 'error', reason: 'upload_failed', error: err.message },
+      });
+    }
+
+    try {
+      let resumeText = '';
+      const jdText = req.body?.jdText || req.body?.jobDesc || '';
+
+      if (req.file) {
+        resumeText = await parseResumeFromFile(req.file.path, req.file.mimetype);
+      } else if (req.body?.resumeText) {
+        resumeText = fromPlainText(req.body.resumeText);
+      }
+
+      if (!resumeText || resumeText.length < 10) {
+        return res.status(400).json({
+          code: 1,
+          msg: '简历内容过短或解析失败',
+          data: {
+            status: 'error',
+            screening_passed: false,
+            reason: 'resume_too_short',
+            required_action: '请检查文件是否为空或重新上传清晰版本',
+            next_step: 'user_input_required',
+          },
+        });
+      }
+
+      if (!jdText || jdText.length < 10) {
+        return res.status(400).json({
+          code: 1,
+          msg: 'JD 内容过短或缺失',
+          data: {
+            status: 'error',
+            screening_passed: false,
+            reason: 'jd_too_short',
+            required_action: '请提供完整岗位描述',
+            next_step: 'user_input_required',
+          },
+        });
+      }
+
+      const parsedJD = parseJD(jdText);
+      const result = await screeningService.runScreening({ resumeText, jdText, parsedJD });
+
+      return res.json({ code: 0, msg: 'ok', data: result });
+    } catch (error) {
+      return res.status(500).json({ code: 1, msg: 'internal_error', data: { error: error?.message } });
+    }
+  });
+});
+
+// -------------------------------
+// 简历优化：文本输入模式
+// -------------------------------
+app.post('/v1/resume/optimize', (req, res) => optimizeController.handleOptimize(req, res));
 
 // -------------------------------
 // 匹配分：简历技能 vs JD 关键词（Jaccard + 必须项命中）
