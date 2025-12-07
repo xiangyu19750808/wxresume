@@ -771,7 +771,7 @@
     },
     "/v1/check": {
       "post": {
-        "summary": "Screen resume against JD with hard checks and warnings",
+        "summary": "Resume and JD screening (placeholder)",
         "requestBody": {
           "required": true,
           "content": {
@@ -779,56 +779,15 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "resumeText": {
-                    "type": "string"
-                  },
-                  "jdText": {
-                    "type": "string"
-                  }
-                }
-              }
-            },
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "resumeFile": {
-                    "type": "string",
-                    "format": "binary"
-                  },
-                  "jobDesc": {
-                    "type": "string"
-                  },
-                  "jdText": {
-                    "type": "string"
-                  }
+                  "resumeText": { "type": "string" },
+                  "jdText": { "type": "string" }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "ok",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "integer"
-                    },
-                    "msg": {
-                      "type": "string"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/ScreeningResult"
-                    }
-                  }
-                }
-              }
-            }
-          }
+          "200": { "description": "ok" }
         }
       }
     },
@@ -843,18 +802,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "scores": {
-                      "type": "array",
-                      "items": {
-                        "type": "number"
-                      }
-                    },
-                    "anxietyCopy": {
-                      "type": "string"
-                    },
-                    "radar": {
-                      "type": "object"
-                    }
+                    "scores": { "type": "array", "items": { "type": "number" } },
+                    "anxietyCopy": { "type": "string" },
+                    "radar": { "type": "object" }
                   }
                 }
               }
@@ -874,18 +824,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "dimensions": {
-                      "type": "array",
-                      "items": {
-                        "type": "number"
-                      }
-                    },
-                    "optimizationDirectives": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
+                    "dimensions": { "type": "array", "items": { "type": "number" } },
+                    "optimizationDirectives": { "type": "array", "items": { "type": "string" } }
                   }
                 }
               }
@@ -896,38 +836,7 @@
     },
     "/v1/resume/optimize": {
       "post": {
-        "summary": "Resume optimization for pass-rate uplift",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "resumeText": {
-                    "type": "string"
-                  },
-                  "jdText": {
-                    "type": "string"
-                  },
-                  "companyType": {
-                    "type": "string",
-                    "enum": [
-                      "large_corp",
-                      "startup",
-                      "balanced",
-                      "unknown"
-                    ]
-                  }
-                },
-                "required": [
-                  "resumeText",
-                  "jdText"
-                ]
-              }
-            }
-          }
-        },
+        "summary": "Resume optimization (placeholder)",
         "responses": {
           "200": {
             "description": "ok",
@@ -936,15 +845,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "code": {
-                      "type": "number"
-                    },
-                    "msg": {
-                      "type": "string"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/OptimizationResult"
-                    }
+                    "optimized_resume": { "type": "string" },
+                    "original_score": { "type": "number" },
+                    "optimized_score": { "type": "number" },
+                    "key_improvements": { "type": "array", "items": { "type": "string" } },
+                    "applied_changes": { "type": "array", "items": { "type": "object" } },
+                    "expected_pass_rate_increase": { "type": "string" },
+                    "risk_eliminated": { "type": "array", "items": { "type": "string" } },
+                    "checklist": { "type": "array", "items": { "type": "string" } }
                   }
                 }
               }
@@ -964,18 +872,62 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "fileId": {
-                      "type": "string"
-                    },
-                    "url": {
-                      "type": "string",
-                      "format": "uri"
-                    }
+                    "fileId": { "type": "string" },
+                    "url": { "type": "string", "format": "uri" }
                   }
                 }
               }
             }
           }
+        }
+      }
+    },
+    "/v1/results": {
+      "get": {
+        "summary": "List stored results (placeholder)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": { "type": "array", "items": { "type": "object" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/results/{rid}": {
+      "get": {
+        "summary": "Get stored result by id (placeholder)",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "not found" }
         }
       }
     },
@@ -1147,45 +1099,6 @@
           },
           "required_action": {
             "type": "string"
-          }
-        }
-      },
-      "OptimizationChange": {
-        "type": "object",
-        "properties": {
-          "module": { "type": "string" },
-          "type": { "type": "string" },
-          "priority": {
-            "type": "string",
-            "enum": ["critical", "high", "medium", "low"]
-          },
-          "description": { "type": "string" },
-          "reason": { "type": "string" },
-          "impact": { "type": "string" }
-        }
-      },
-      "OptimizationResult": {
-        "type": "object",
-        "properties": {
-          "optimized_resume": { "type": "string" },
-          "original_score": { "type": "number" },
-          "optimized_score": { "type": "number" },
-          "expected_pass_rate_increase": { "type": "string" },
-          "key_improvements": {
-            "type": "array",
-            "items": { "type": "string" }
-          },
-          "applied_changes": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/OptimizationChange" }
-          },
-          "risk_eliminated": {
-            "type": "array",
-            "items": { "type": "string" }
-          },
-          "checklist": {
-            "type": "array",
-            "items": { "type": "string" }
           }
         }
       }

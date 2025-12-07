@@ -1,73 +1,33 @@
-import { HardRequirementsService } from './hard-requirements.service.js';
-import { WarningsService } from './warnings.service.js';
-import { calcMatchScore } from './match.service.js';
-import { scoreResumeQuality } from './quality.service.js';
-import type { ParsedJD } from '../parsers/jd.parser';
-
-export interface HardCheckItem {
-  label: string;
-  jdValue: string;
-  resumeValue: string;
-  match: string;
-}
+import { HardRequirementsService } from './hard-requirements.service';
+import { WarningsService } from './warnings.service';
+import { MatchService } from './match.service';
+import { QualityService } from './quality.service';
 
 export interface ScreeningResult {
   status: 'success' | 'warning' | 'error';
-  screening_passed: boolean;
-  warnings: string[] | null;
-  jd_quality: 'A' | 'B' | 'C' | 'D';
-  resume_quality: 'A' | 'B' | 'C' | 'D';
-  hard_requirement_match: number;
-  hardCheckResult: HardCheckItem[];
-  match_score: number;
-  next_step: 'proceed_to_optimization' | 'user_input_required' | 'reject';
-  reason?: string;
-  required_action?: string;
+  hardCheckResult?: any;
+  warnings?: any[];
+  matchScore?: number;
+  qualityScore?: number;
+  metadata?: Record<string, unknown>;
 }
 
 export class ScreeningService {
   private hardRequirementsService = new HardRequirementsService();
   private warningsService = new WarningsService();
+  private matchService = new MatchService();
+  private qualityService = new QualityService();
 
-  async runScreening(input: { resumeText: string; jdText: string; parsedJD: ParsedJD }): Promise<ScreeningResult> {
-    const { resumeText, jdText, parsedJD } = input;
-
-    const hardRules = await this.hardRequirementsService.checkRequirements(resumeText, jdText, parsedJD);
-    if (hardRules.shouldStop) {
-      return {
-        status: 'error',
-        screening_passed: false,
-        warnings: hardRules.warnings,
-        jd_quality: parsedJD?.qualityScore ?? 'D',
-        resume_quality: 'D',
-        hard_requirement_match: 0,
-        hardCheckResult: hardRules.hardCheckItems,
-        match_score: 0,
-        next_step: 'user_input_required',
-        reason: 'resume_too_short',
-        required_action: '请补充简历内容至 50 字以上',
-      };
-    }
-
-    const warningResult = await this.warningsService.generateWarnings(resumeText, jdText, parsedJD);
-    const { matchScore, hardMatchRatio, hardCheckItems } = await calcMatchScore(resumeText, parsedJD);
-    const resumeQuality = scoreResumeQuality(resumeText);
-    const jdQuality = parsedJD?.qualityScore ?? 'C';
-
-    const status: ScreeningResult['status'] = warningResult.warnings.length > 0 ? 'warning' : 'success';
-    const next_step: ScreeningResult['next_step'] =
-      status === 'success' ? 'proceed_to_optimization' : 'user_input_required';
-
+  async runScreening(resumeText: string, jdText: string): Promise<ScreeningResult> {
+    // Orchestrates hard checks, warnings, match score, and quality score
+    // Returns consolidated screening result (implementation pending)
     return {
-      status,
-      screening_passed: true,
-      warnings: [...warningResult.warnings, ...(parsedJD?.warnings || [])],
-      jd_quality: jdQuality,
-      resume_quality: resumeQuality,
-      hard_requirement_match: hardMatchRatio,
-      hardCheckResult: hardCheckItems,
-      match_score: matchScore,
-      next_step,
+      status: 'warning',
+      hardCheckResult: await this.hardRequirementsService.checkRequirements(resumeText, jdText),
+      warnings: await this.warningsService.generateWarnings(resumeText, jdText),
+      matchScore: await this.matchService.calculateMatchScore(resumeText, jdText),
+      qualityScore: await this.qualityService.scoreQuality(resumeText),
+      metadata: {},
     };
   }
 }

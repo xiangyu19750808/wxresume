@@ -7,7 +7,6 @@ import jwt from 'jsonwebtoken';
 import { parseJD } from './check/parsers/jd.parser.js';
 import { parseResumeFromFile, fromPlainText } from './check/parsers/resume.parser.js';
 import { ScreeningService } from './check/services/screening.service.js';
-import { OptimizeController } from './resume/controller/optimize.controller.js';
 
 import { createUsersRouter } from './modules/users/index.js';
 import { createFileRouter } from './modules/file/index.js';
@@ -55,7 +54,6 @@ multerPromise.then((instance) => {
   if (instance) uploadResumeMiddleware = instance.single('resumeFile');
 });
 const screeningService = new ScreeningService();
-const optimizeController = new OptimizeController();
 const SAMPLE_RESUME_PATH = path.join(REPO_ROOT, 'samples/resume/alice.json');
 
 function loadSampleResume() {
@@ -1793,11 +1791,6 @@ app.post('/v1/check', async (req, res) => {
     }
   });
 });
-
-// -------------------------------
-// 简历优化：文本输入模式
-// -------------------------------
-app.post('/v1/resume/optimize', (req, res) => optimizeController.handleOptimize(req, res));
 
 // -------------------------------
 // 匹配分：简历技能 vs JD 关键词（Jaccard + 必须项命中）
