@@ -676,6 +676,47 @@
         }
       }
     },
+    "/v1/resume/optimize": {
+      "post": {
+        "summary": "Resume optimization for pass-rate uplift",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resumeText": { "type": "string" },
+                  "jdText": { "type": "string" },
+                  "companyType": {
+                    "type": "string",
+                    "enum": ["large_corp", "startup", "balanced", "unknown"]
+                  }
+                },
+                "required": ["resumeText", "jdText"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "number" },
+                    "msg": { "type": "string" },
+                    "data": { "$ref": "#/components/schemas/OptimizationResult" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/file/download": {
       "get": {
         "summary": "Get signed download url",
@@ -767,6 +808,32 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "OptimizationChange": {
+        "type": "object",
+        "properties": {
+          "module": { "type": "string" },
+          "type": { "type": "string" },
+          "priority": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+          "description": { "type": "string" },
+          "reason": { "type": "string" },
+          "impact": { "type": "string" }
+        }
+      },
+      "OptimizationResult": {
+        "type": "object",
+        "properties": {
+          "optimized_resume": { "type": "string" },
+          "original_score": { "type": "number" },
+          "optimized_score": { "type": "number" },
+          "expected_pass_rate_increase": { "type": "string" },
+          "key_improvements": { "type": "array", "items": { "type": "string" } },
+          "applied_changes": { "type": "array", "items": { "$ref": "#/components/schemas/OptimizationChange" } },
+          "risk_eliminated": { "type": "array", "items": { "type": "string" } },
+          "checklist": { "type": "array", "items": { "type": "string" } }
+        }
       }
     }
   }
