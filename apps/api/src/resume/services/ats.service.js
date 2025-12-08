@@ -58,6 +58,7 @@ function buildAdvice(issues, grade) {
   return `${suggestions.join('；')}。${gradeNotice}`;
 }
 
+// 修改后只保留一个定义的函数
 function scoreCompatibility(resumeText) {
   const normalized = resumeText ?? '';
   const issues = [];
