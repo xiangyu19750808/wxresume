@@ -62,6 +62,11 @@ function buildAdvice(issues, grade) {
 function scoreCompatibility(resumeText) {
   const normalized = resumeText ?? '';
   const issues = [];
+  const trimmed = jdText.trim();
+
+  if (!trimmed) {
+    return issues;
+  }
 
   if (containsTable(normalized)) {
     issues.push({
@@ -95,7 +100,48 @@ function scoreCompatibility(resumeText) {
     });
   }
 
-  const nonAsciiRatio = calculateNonAsciiRatio(normalized);
+  const noisySymbols = text.match(/[^\w\s\u4e00-\u9fa5.,;:()\-]/g) || [];
+  return noisySymbols.length / meaningfulLength;
+}
+
+function scoreCompatibility(resumeText, jdText = '') {
+  const normalizedResume = resumeText ?? '';
+  const normalizedJd = jdText ?? '';
+  const issues = [];
+
+  if (containsTable(normalizedResume)) {
+    issues.push({
+      penalty: 35,
+      description: '检测到表格或分栏结构，可能导致 ATS 解析失败',
+      suggestion: '移除表格/分栏，改用标题和项目符号重新排版',
+    });
+  }
+
+  if (containsExecutableMarkup(normalizedResume)) {
+    issues.push({
+      penalty: 30,
+      description: '存在 script/style/iframe 等特殊标签',
+      suggestion: '删除嵌入的脚本或样式标签，仅保留纯文本内容',
+    });
+  }
+
+  if (/[�]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(normalizedResume)) {
+    issues.push({
+      penalty: 30,
+      description: '检测到乱码或控制字符',
+      suggestion: '检查文件编码并移除控制字符，导出为 UTF-8 文本或 PDF',
+    });
+  }
+
+  if (/\t|\u00A0|\u3000/.test(normalizedResume)) {
+    issues.push({
+      penalty: 10,
+      description: '含有制表符或全角空格，可能影响 ATS 读取',
+      suggestion: '用普通空格替换制表符/全角空格，保持单栏文本',
+    });
+  }
+
+  const nonAsciiRatio = calculateNonAsciiRatio(normalizedResume);
   if (nonAsciiRatio > 0.6) {
     issues.push({
       penalty: 25,
@@ -103,6 +149,8 @@ function scoreCompatibility(resumeText) {
       suggestion: '减少特殊符号与稀有字符，保持主要内容为标准 ASCII 文本',
     });
   }
+
+  issues.push(...evaluateJobDescription(normalizedJd));
 
   const totalPenalty = issues.reduce((sum, issue) => sum + issue.penalty, 0);
   const score = Math.max(0, Math.min(100, Math.round(100 - totalPenalty)));
@@ -114,7 +162,7 @@ function scoreCompatibility(resumeText) {
 }
 
 export class AtsService {
-  async apply(resumeText) {
+  async apply(resumeText, jdText = '') {
     const originalText = resumeText ?? '';
     let optimized = normalizeBullets(originalText)
       .replace(/\r\n/g, '\n')
@@ -156,7 +204,7 @@ export class AtsService {
       });
     }
 
-    const atsCompatibility = scoreCompatibility(originalText);
+    const atsCompatibility = scoreCompatibility(originalText, jdText);
 
     return {
       optimizedResume: optimized,

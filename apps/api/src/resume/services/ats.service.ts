@@ -17,11 +17,12 @@ export class AtsService {
     return resumeText;
   }
 
-  scoreCompatibility(resumeText: string): AtsCompatibilityResult {
-    const normalized = resumeText ?? '';
+  scoreCompatibility(resumeText: string, jdText = ''): AtsCompatibilityResult {
+    const normalizedResume = resumeText ?? '';
+    const normalizedJd = jdText ?? '';
     const issues: CompatibilityIssue[] = [];
 
-    if (this.containsTable(normalized)) {
+    if (this.containsTable(normalizedResume)) {
       issues.push({
         penalty: 35,
         description: '检测到表格或分栏结构，可能导致 ATS 解析失败',
@@ -29,7 +30,7 @@ export class AtsService {
       });
     }
 
-    if (this.containsExecutableMarkup(normalized)) {
+    if (this.containsExecutableMarkup(normalizedResume)) {
       issues.push({
         penalty: 30,
         description: '存在 script/style/iframe 等特殊标签',
@@ -37,7 +38,7 @@ export class AtsService {
       });
     }
 
-    if (/[�]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(normalized)) {
+    if (/[�]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(normalizedResume)) {
       issues.push({
         penalty: 30,
         description: '检测到乱码或控制字符',
@@ -45,7 +46,7 @@ export class AtsService {
       });
     }
 
-    if (/\t|\u00A0|\u3000/.test(normalized)) {
+    if (/\t|\u00A0|\u3000/.test(normalizedResume)) {
       issues.push({
         penalty: 10,
         description: '含有制表符或全角空格，可能影响 ATS 读取',
@@ -53,7 +54,7 @@ export class AtsService {
       });
     }
 
-    const nonAsciiRatio = this.getNonAsciiRatio(normalized);
+    const nonAsciiRatio = this.getNonAsciiRatio(normalizedResume);
     if (nonAsciiRatio > 0.6) {
       issues.push({
         penalty: 25,
@@ -61,6 +62,8 @@ export class AtsService {
         suggestion: '减少特殊符号与稀有字符，保持主要内容为标准 ASCII 文本',
       });
     }
+
+    issues.push(...this.evaluateJobDescription(normalizedJd));
 
     const totalPenalty = issues.reduce((sum, issue) => sum + issue.penalty, 0);
     const score = Math.max(0, Math.min(100, Math.round(100 - totalPenalty)));
