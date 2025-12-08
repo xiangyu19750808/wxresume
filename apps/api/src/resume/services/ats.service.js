@@ -2,15 +2,91 @@ function normalizeBullets(text) {
   return text.replace(/[•·●]/g, '-');
 }
 
+function calculateNonAsciiRatio(text) {
+  const meaningfulText = text.replace(/\s+/g, '');
+  if (!meaningfulText.length) {
+    return 0;
+  }
+  const nonAsciiCount = (meaningfulText.match(/[^\x00-\x7F]/g) || []).length;
+  return nonAsciiCount / meaningfulText.length;
+}
+
+function containsTable(text) {
+  const htmlTablePattern = /<table[\s\S]*?>[\s\S]*?<\/table>/i;
+  const markdownTablePattern = /\|\s*[-:]{2,}[-|\s:]*\|/;
+  const boxDrawingPattern = /[┌┬┐└┴┘┼─│]/;
+  return (
+    htmlTablePattern.test(text) ||
+    markdownTablePattern.test(text) ||
+    boxDrawingPattern.test(text)
+  );
+}
+
+function containsExecutableMarkup(text) {
+  const scriptPattern = /<script[\s\S]*?>[\s\S]*?<\/script>/i;
+  const stylePattern = /<style[\s\S]*?>[\s\S]*?<\/style>/i;
+  const iframePattern = /<iframe[\s\S]*?>[\s\S]*?<\/iframe>/i;
+  return scriptPattern.test(text) || stylePattern.test(text) || iframePattern.test(text);
+}
+
+function mapScoreToGrade(score) {
+  if (score >= 90) return 'S';
+  if (score >= 75) return 'A';
+  if (score >= 60) return 'B';
+  if (score >= 40) return 'C';
+  return 'D';
+}
+
+function deriveConfidence(score, issueCount) {
+  const baseConfidence = score / 100;
+  const deduction = Math.min(0.6, issueCount * 0.1 + (100 - score) / 300);
+  const confidence = Math.max(0.3, Math.min(1, baseConfidence - deduction + 0.2));
+  return Number(confidence.toFixed(2));
+}
+
+function scoreCompatibility(resumeText) {
+  const normalized = resumeText ?? '';
+  const issues = [];
+
+  if (containsTable(normalized)) {
+    issues.push({ penalty: 25, description: '检测到表格或分栏结构，可能导致 ATS 解析失败' });
+  }
+
+  if (containsExecutableMarkup(normalized)) {
+    issues.push({ penalty: 20, description: '存在 script/style/iframe 等特殊标签' });
+  }
+
+  if (/[�]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(normalized)) {
+    issues.push({ penalty: 15, description: '检测到乱码或控制字符' });
+  }
+
+  if (/\t|\u00A0|\u3000/.test(normalized)) {
+    issues.push({ penalty: 10, description: '含有制表符或全角空格，可能影响 ATS 读取' });
+  }
+
+  const nonAsciiRatio = calculateNonAsciiRatio(normalized);
+  if (nonAsciiRatio > 0.6) {
+    issues.push({ penalty: 15, description: '中文或非 ASCII 字符占比过高，存在编码兼容风险' });
+  }
+
+  const totalPenalty = issues.reduce((sum, issue) => sum + issue.penalty, 0);
+  const score = Math.max(0, Math.min(100, Math.round(100 - totalPenalty)));
+  const grade = mapScoreToGrade(score);
+  const confidence = deriveConfidence(score, issues.length);
+
+  return { score, grade, confidence };
+}
+
 export class AtsService {
   async apply(resumeText) {
-    let optimized = normalizeBullets(resumeText)
+    const originalText = resumeText ?? '';
+    let optimized = normalizeBullets(originalText)
       .replace(/\r\n/g, '\n')
       .replace(/\n{3,}/g, '\n\n');
 
     const changes = [];
 
-    if (optimized !== resumeText) {
+    if (optimized !== originalText) {
       changes.push({
         module: 'ATS',
         type: 'format',
@@ -21,7 +97,7 @@ export class AtsService {
       });
     }
 
-    if (/\t|\u3000/.test(resumeText)) {
+    if (/\t|\u3000/.test(originalText)) {
       optimized = optimized.replace(/\t|\u3000/g, ' ');
       changes.push({
         module: 'ATS',
@@ -44,9 +120,12 @@ export class AtsService {
       });
     }
 
+    const atsCompatibility = scoreCompatibility(originalText);
+
     return {
       optimizedResume: optimized,
       changes,
+      atsCompatibility,
     };
   }
 }

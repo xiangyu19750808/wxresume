@@ -1,6 +1,108 @@
+export interface AtsCompatibilityResult {
+  score: number;
+  grade: 'S' | 'A' | 'B' | 'C' | 'D';
+  confidence: number;
+}
+
+interface CompatibilityIssue {
+  penalty: number;
+  description: string;
+}
+
 export class AtsService {
   async optimizeForAts(resumeText: string, jdText: string): Promise<string> {
     // Adjust resume for ATS survival
     return resumeText;
+  }
+
+  scoreCompatibility(resumeText: string): AtsCompatibilityResult {
+    const normalized = resumeText ?? '';
+    const issues: CompatibilityIssue[] = [];
+
+    if (this.containsTable(normalized)) {
+      issues.push({
+        penalty: 25,
+        description: '检测到表格或分栏结构，可能导致 ATS 解析失败',
+      });
+    }
+
+    if (this.containsExecutableMarkup(normalized)) {
+      issues.push({
+        penalty: 20,
+        description: '存在 script/style/iframe 等特殊标签',
+      });
+    }
+
+    if (/[�]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(normalized)) {
+      issues.push({
+        penalty: 15,
+        description: '检测到乱码或控制字符',
+      });
+    }
+
+    if (/\t|\u00A0|\u3000/.test(normalized)) {
+      issues.push({
+        penalty: 10,
+        description: '含有制表符或全角空格，可能影响 ATS 读取',
+      });
+    }
+
+    const nonAsciiRatio = this.getNonAsciiRatio(normalized);
+    if (nonAsciiRatio > 0.6) {
+      issues.push({
+        penalty: 15,
+        description: '中文或非 ASCII 字符占比过高，存在编码兼容风险',
+      });
+    }
+
+    const totalPenalty = issues.reduce((sum, issue) => sum + issue.penalty, 0);
+    const score = Math.max(0, Math.min(100, Math.round(100 - totalPenalty)));
+    const grade = this.mapScoreToGrade(score);
+    const confidence = this.deriveConfidence(score, issues.length);
+
+    return { score, grade, confidence };
+  }
+
+  private containsTable(text: string): boolean {
+    const htmlTablePattern = /<table[\s\S]*?>[\s\S]*?<\/table>/i;
+    const markdownTablePattern = /\|\s*[-:]{2,}[-|\s:]*\|/;
+    const boxDrawingPattern = /[┌┬┐└┴┘┼─│]/;
+    return (
+      htmlTablePattern.test(text) ||
+      markdownTablePattern.test(text) ||
+      boxDrawingPattern.test(text)
+    );
+  }
+
+  private containsExecutableMarkup(text: string): boolean {
+    const scriptPattern = /<script[\s\S]*?>[\s\S]*?<\/script>/i;
+    const stylePattern = /<style[\s\S]*?>[\s\S]*?<\/style>/i;
+    const iframePattern = /<iframe[\s\S]*?>[\s\S]*?<\/iframe>/i;
+    return scriptPattern.test(text) || stylePattern.test(text) || iframePattern.test(text);
+  }
+
+  private getNonAsciiRatio(text: string): number {
+    const meaningfulText = text.replace(/\s+/g, '');
+    if (!meaningfulText.length) {
+      return 0;
+    }
+
+    const nonAsciiCount = (meaningfulText.match(/[^\x00-\x7F]/g) || []).length;
+    return nonAsciiCount / meaningfulText.length;
+  }
+
+  private mapScoreToGrade(score: number): AtsCompatibilityResult['grade'] {
+    if (score >= 90) return 'S';
+    if (score >= 75) return 'A';
+    if (score >= 60) return 'B';
+    if (score >= 40) return 'C';
+    return 'D';
+  }
+
+  private deriveConfidence(score: number, issueCount: number): number {
+    const baseConfidence = score / 100;
+    const deduction = Math.min(0.6, issueCount * 0.1 + (100 - score) / 300);
+    const confidence = Math.max(0.3, Math.min(1, baseConfidence - deduction + 0.2));
+    return Number(confidence.toFixed(2));
   }
 }
