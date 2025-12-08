@@ -14,7 +14,7 @@ function calculateNonAsciiRatio(text) {
   
   // 如果问号比例超过25%，认为有严重的编码问题
   if (questionMarkRatio > 0.25) {
-    return 0.7;
+    return 0.7; // 返回大于0.6的值，触发扣分
   }
   
   // 正常检测非ASCII字符
@@ -24,7 +24,8 @@ function calculateNonAsciiRatio(text) {
 
 function containsTable(text) {
   const htmlTablePattern = /<table[\s\S]*?>[\s\S]*?<\/table>/i;
-  const markdownTablePattern = /\|\s*[-:]{2,}[-|\s:]*\|/;
+  // 修复：使 markdown 表格检测更严格，避免误判
+  const markdownTablePattern = /\|[^|\n]+\|[^|\n]*\|\s*\n\|\s*[-:]{2,}\s*\|/;
   const boxDrawingPattern = /[┌┬┐└┴┘┼─│]/;
   return (
     htmlTablePattern.test(text) ||
@@ -104,7 +105,7 @@ function calculateOptimizedScore(currentScore, issues) {
 
 function buildDirectiveAbstract(issues) {
   if (!issues.length) {
-    return "简历格式优秀，无需额外优化。";
+    return "简历格式干净，符合 ATS 要求，可直接投递。";
   }
   
   const directives = issues.map(issue => {
@@ -127,16 +128,29 @@ function buildDirectiveAbstract(issues) {
   return `修复了${directives.length}项格式问题：${directives.join("、")}。`;
 }
 
-function deriveConfidence(score, issueCount) {
-  const baseConfidence = score / 100;
-  const deduction = Math.min(0.6, issueCount * 0.08 + (100 - score) / 250);
-  const confidence = Math.max(0.3, Math.min(1, baseConfidence - deduction + 0.2));
-  return Number(confidence.toFixed(2));
+  const suggestions = issues.map((issue) => issue.suggestion);
+  const gradeNotice =
+    grade === "D"
+      ? "存在严重格式或编码问题，需立即修复后再投递。"
+      : "建议优先处理以上问题以提升 ATS 通过率。";
+
+  return `${suggestions.join("；")}。${gradeNotice}`;
 }
 
+// 修复：添加对简历长度的检查
 function scoreCompatibility(resumeText) {
   const normalized = resumeText ?? "";
   const issues = [];
+
+  // 检查简历长度是否过短（增加检查）
+  const textLength = normalized.length;
+  if (textLength < 200) {
+    issues.push({
+      penalty: 20,
+      description: '简历内容过短，可能缺乏必要信息',
+      suggestion: '补充工作经历、技能等关键信息',
+    });
+  }
 
   if (containsTable(normalized)) {
     issues.push({
@@ -246,14 +260,18 @@ function scoreCompatibility(resumeText) {
 
 export class AtsService {
   async apply(resumeText) {
-    const originalText = resumeText ?? "";
+    const originalText = resumeText ?? '';
     let optimized = normalizeBullets(originalText)
       .replace(/\r\n/g, "\n")
       .replace(/\n{3,}/g, "\n\n");
 
     const changes = [];
 
-    if (optimized !== originalText) {
+    // 修复：只有当有实际的项目符号替换时才记录变化
+    const hasBulletChanges = /[•·●]/.test(originalText);
+    const hasLineBreakChanges = /\r\n/.test(originalText) || /\n{3,}/.test(originalText);
+    
+    if (hasBulletChanges || hasLineBreakChanges) {
       changes.push({
         module: "ATS",
         type: "format",
@@ -264,14 +282,16 @@ export class AtsService {
       });
     }
 
-    if (/\t|\u3000/.test(originalText)) {
-      optimized = optimized.replace(/\t|\u3000/g, " ");
+    // 修复：检查优化后的文本而不是原始文本
+    if (/\t|\u3000/.test(optimized)) {
+      optimized = optimized.replace(/\t|\u3000/g, ' ');
       changes.push({
-        module: "ATS",
-        type: "format",
-        priority: "medium",
-        description: "去除制表符/全角空格，保持文本流畅",
-        reason: "避免 ATS 误判分栏或表格",
+        module: 'ATS',
+        type: 'format',
+        priority: 'medium',
+        description: '去除制表符/全角空格，保持文本流畅',
+        reason: '避免 ATS 误判分栏或表格',
+        impact: 'ats_compatibility',
       });
     }
 
