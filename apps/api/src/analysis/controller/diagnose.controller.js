@@ -1,10 +1,12 @@
-import { Request, Response } from 'express';
-import { DiagnoseService } from '../services/diagnose.service';
+import { DiagnoseService } from '../services/diagnose.service.js';
 
 export class DiagnoseController {
-  private diagnoseService = new DiagnoseService();
+  constructor() {
+    this.diagnoseService = new DiagnoseService();
+    this.handleDiagnose = this.handleDiagnose.bind(this);
+  }
 
-  async handleDiagnose(req: Request, res: Response) {
+  async handleDiagnose(req, res) {
     const { resumeText = '', jdText = '' } = req.body || {};
     const result = await this.diagnoseService.runDiagnose(resumeText, jdText);
     res.json({ status: 'success', data: result });

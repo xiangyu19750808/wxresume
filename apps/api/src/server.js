@@ -11,6 +11,7 @@ import { ScreeningService } from './check/services/screening.service.js';
 import { createUsersRouter } from './modules/users/index.js';
 import { createFileRouter } from './modules/file/index.js';
 import { createResultsRouter } from './modules/results/index.js';
+import { createDiagnoseRouter } from './analysis/index.js';
 import { reqid } from './middlewares/reqid.js';
 import jwtMiddleware from './middlewares/jwt.js';
 
@@ -872,6 +873,7 @@ app.get('/v1/db/ping', async (req, res) => {
 // -------------------------------
 app.use(createFileRouter());
 app.use(createResultsRouter());
+app.use('/v1/analysis', createDiagnoseRouter());
 app.use(createUsersRouter());
 
 // -------------------------------
