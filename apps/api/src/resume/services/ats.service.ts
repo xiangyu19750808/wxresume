@@ -57,7 +57,7 @@ export class AtsService {
     const nonAsciiRatio = this.getNonAsciiRatio(normalizedResume);
     if (nonAsciiRatio > 0.6) {
       issues.push({
-        penalty: 35,
+        penalty: 25,
         description: '中文或非 ASCII 字符占比过高，存在编码兼容风险',
         suggestion: '减少特殊符号与稀有字符，保持主要内容为标准 ASCII 文本',
       });
@@ -103,10 +103,10 @@ export class AtsService {
   }
 
   private mapScoreToGrade(score: number): AtsCompatibilityResult['grade'] {
-    if (score >= 90) return 'S';
-    if (score >= 75) return 'A';
-    if (score >= 60) return 'B';
-    if (score >= 40) return 'C';
+    if (score >= 95) return 'S';
+    if (score >= 85) return 'A';
+    if (score >= 70) return 'B';
+    if (score >= 50) return 'C';
     return 'D';
   }
 
@@ -129,51 +129,5 @@ export class AtsService {
         : '建议优先处理以上问题以提升 ATS 通过率。';
 
     return `${suggestions.join('；')}。${gradeNotice}`;
-  }
-
-  private evaluateJobDescription(jdText: string): CompatibilityIssue[] {
-    const issues: CompatibilityIssue[] = [];
-    const trimmed = jdText.trim();
-
-    if (!trimmed) {
-      return issues;
-    }
-
-    if (this.containsExecutableMarkup(trimmed)) {
-      issues.push({
-        penalty: 15,
-        description: '岗位 JD 包含 script/style/iframe 等标签',
-        suggestion: '使用纯文本 JD 描述，避免嵌入脚本或样式以确保安全与可读性',
-      });
-    }
-
-    if (trimmed.length < 40) {
-      issues.push({
-        penalty: 5,
-        description: '岗位 JD 描述过短，关键信息不足',
-        suggestion: '补充岗位 JD 的职责与技能要求，突出核心关键词以便 ATS 匹配',
-      });
-    }
-
-    const symbolRatio = this.getSymbolNoiseRatio(trimmed);
-    if (symbolRatio > 0.25) {
-      issues.push({
-        penalty: 15,
-        description: '岗位 JD 含大量特殊字符或乱码，影响清晰度',
-        suggestion: '删除岗位 JD 中的多余符号或异常字符，保持 JD 为清晰的纯文本',
-      });
-    }
-
-    return issues;
-  }
-
-  private getSymbolNoiseRatio(text: string): number {
-    const meaningfulLength = text.replace(/\s+/g, '').length;
-    if (!meaningfulLength) {
-      return 0;
-    }
-
-    const noisySymbols = text.match(/[^\w\s\u4e00-\u9fa5.,;:()\-]/g) || [];
-    return noisySymbols.length / meaningfulLength;
   }
 }

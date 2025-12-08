@@ -30,10 +30,10 @@ function containsExecutableMarkup(text) {
 }
 
 function mapScoreToGrade(score) {
-  if (score >= 90) return 'S';
-  if (score >= 75) return 'A';
-  if (score >= 60) return 'B';
-  if (score >= 40) return 'C';
+  if (score >= 95) return 'S';
+  if (score >= 85) return 'A';
+  if (score >= 70) return 'B';
+  if (score >= 50) return 'C';
   return 'D';
 }
 
@@ -58,7 +58,8 @@ function buildAdvice(issues, grade) {
   return `${suggestions.join('；')}。${gradeNotice}`;
 }
 
-function evaluateJobDescription(jdText) {
+function scoreCompatibility(resumeText) {
+  const normalized = resumeText ?? '';
   const issues = [];
   const trimmed = jdText.trim();
 
@@ -66,38 +67,36 @@ function evaluateJobDescription(jdText) {
     return issues;
   }
 
-  if (containsExecutableMarkup(trimmed)) {
+  if (containsTable(normalized)) {
     issues.push({
-      penalty: 15,
-      description: '岗位 JD 包含 script/style/iframe 等标签',
-      suggestion: '使用纯文本 JD 描述，避免嵌入脚本或样式以确保安全与可读性',
+      penalty: 35,
+      description: '检测到表格或分栏结构，可能导致 ATS 解析失败',
+      suggestion: '移除表格/分栏，改用标题和项目符号重新排版',
     });
   }
 
-  if (trimmed.length < 40) {
+  if (containsExecutableMarkup(normalized)) {
     issues.push({
-      penalty: 5,
-      description: '岗位 JD 描述过短，关键信息不足',
-      suggestion: '补充岗位 JD 的职责与技能要求，突出核心关键词以便 ATS 匹配',
+      penalty: 30,
+      description: '存在 script/style/iframe 等特殊标签',
+      suggestion: '删除嵌入的脚本或样式标签，仅保留纯文本内容',
     });
   }
 
-  const symbolRatio = getSymbolNoiseRatio(trimmed);
-  if (symbolRatio > 0.25) {
+  if (/[�]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(normalized)) {
     issues.push({
-      penalty: 15,
-      description: '岗位 JD 含大量特殊字符或乱码，影响清晰度',
-      suggestion: '删除岗位 JD 中的多余符号或异常字符，保持 JD 为清晰的纯文本',
+      penalty: 30,
+      description: '检测到乱码或控制字符',
+      suggestion: '检查文件编码并移除控制字符，导出为 UTF-8 文本或 PDF',
     });
   }
 
-  return issues;
-}
-
-function getSymbolNoiseRatio(text) {
-  const meaningfulLength = text.replace(/\s+/g, '').length;
-  if (!meaningfulLength) {
-    return 0;
+  if (/\t|\u00A0|\u3000/.test(normalized)) {
+    issues.push({
+      penalty: 10,
+      description: '含有制表符或全角空格，可能影响 ATS 读取',
+      suggestion: '用普通空格替换制表符/全角空格，保持单栏文本',
+    });
   }
 
   const noisySymbols = text.match(/[^\w\s\u4e00-\u9fa5.,;:()\-]/g) || [];
@@ -144,7 +143,7 @@ function scoreCompatibility(resumeText, jdText = '') {
   const nonAsciiRatio = calculateNonAsciiRatio(normalizedResume);
   if (nonAsciiRatio > 0.6) {
     issues.push({
-      penalty: 35,
+      penalty: 25,
       description: '中文或非 ASCII 字符占比过高，存在编码兼容风险',
       suggestion: '减少特殊符号与稀有字符，保持主要内容为标准 ASCII 文本',
     });
