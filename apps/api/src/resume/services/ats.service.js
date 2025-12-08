@@ -13,7 +13,8 @@ function calculateNonAsciiRatio(text) {
 
 function containsTable(text) {
   const htmlTablePattern = /<table[\s\S]*?>[\s\S]*?<\/table>/i;
-  const markdownTablePattern = /\|\s*[-:]{2,}[-|\s:]*\|/;
+  // 修复：使 markdown 表格检测更严格，避免误判
+  const markdownTablePattern = /\|[^|\n]+\|[^|\n]*\|\s*\n\|\s*[-:]{2,}\s*\|/;
   const boxDrawingPattern = /[┌┬┐└┴┘┼─│]/;
   return (
     htmlTablePattern.test(text) ||
@@ -58,14 +59,19 @@ function buildAdvice(issues, grade) {
   return `${suggestions.join('；')}。${gradeNotice}`;
 }
 
-// 修改后只保留一个定义的函数
+// 修复：添加对简历长度的检查
 function scoreCompatibility(resumeText) {
   const normalized = resumeText ?? '';
   const issues = [];
-  const trimmed = jdText.trim();
 
-  if (!trimmed) {
-    return issues;
+  // 检查简历长度是否过短（增加检查）
+  const textLength = normalized.length;
+  if (textLength < 200) {
+    issues.push({
+      penalty: 20,
+      description: '简历内容过短，可能缺乏必要信息',
+      suggestion: '补充工作经历、技能等关键信息',
+    });
   }
 
   if (containsTable(normalized)) {
@@ -100,48 +106,7 @@ function scoreCompatibility(resumeText) {
     });
   }
 
-  const noisySymbols = text.match(/[^\w\s\u4e00-\u9fa5.,;:()\-]/g) || [];
-  return noisySymbols.length / meaningfulLength;
-}
-
-function scoreCompatibility(resumeText, jdText = '') {
-  const normalizedResume = resumeText ?? '';
-  const normalizedJd = jdText ?? '';
-  const issues = [];
-
-  if (containsTable(normalizedResume)) {
-    issues.push({
-      penalty: 35,
-      description: '检测到表格或分栏结构，可能导致 ATS 解析失败',
-      suggestion: '移除表格/分栏，改用标题和项目符号重新排版',
-    });
-  }
-
-  if (containsExecutableMarkup(normalizedResume)) {
-    issues.push({
-      penalty: 30,
-      description: '存在 script/style/iframe 等特殊标签',
-      suggestion: '删除嵌入的脚本或样式标签，仅保留纯文本内容',
-    });
-  }
-
-  if (/[�]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(normalizedResume)) {
-    issues.push({
-      penalty: 30,
-      description: '检测到乱码或控制字符',
-      suggestion: '检查文件编码并移除控制字符，导出为 UTF-8 文本或 PDF',
-    });
-  }
-
-  if (/\t|\u00A0|\u3000/.test(normalizedResume)) {
-    issues.push({
-      penalty: 10,
-      description: '含有制表符或全角空格，可能影响 ATS 读取',
-      suggestion: '用普通空格替换制表符/全角空格，保持单栏文本',
-    });
-  }
-
-  const nonAsciiRatio = calculateNonAsciiRatio(normalizedResume);
+  const nonAsciiRatio = calculateNonAsciiRatio(normalized);
   if (nonAsciiRatio > 0.6) {
     issues.push({
       penalty: 25,
@@ -149,8 +114,6 @@ function scoreCompatibility(resumeText, jdText = '') {
       suggestion: '减少特殊符号与稀有字符，保持主要内容为标准 ASCII 文本',
     });
   }
-
-  issues.push(...evaluateJobDescription(normalizedJd));
 
   const totalPenalty = issues.reduce((sum, issue) => sum + issue.penalty, 0);
   const score = Math.max(0, Math.min(100, Math.round(100 - totalPenalty)));
@@ -162,7 +125,7 @@ function scoreCompatibility(resumeText, jdText = '') {
 }
 
 export class AtsService {
-  async apply(resumeText, jdText = '') {
+  async apply(resumeText) {
     const originalText = resumeText ?? '';
     let optimized = normalizeBullets(originalText)
       .replace(/\r\n/g, '\n')
@@ -170,7 +133,11 @@ export class AtsService {
 
     const changes = [];
 
-    if (optimized !== originalText) {
+    // 修复：只有当有实际的项目符号替换时才记录变化
+    const hasBulletChanges = /[•·●]/.test(originalText);
+    const hasLineBreakChanges = /\r\n/.test(originalText) || /\n{3,}/.test(originalText);
+    
+    if (hasBulletChanges || hasLineBreakChanges) {
       changes.push({
         module: 'ATS',
         type: 'format',
@@ -181,7 +148,8 @@ export class AtsService {
       });
     }
 
-    if (/\t|\u3000/.test(originalText)) {
+    // 修复：检查优化后的文本而不是原始文本
+    if (/\t|\u3000/.test(optimized)) {
       optimized = optimized.replace(/\t|\u3000/g, ' ');
       changes.push({
         module: 'ATS',
@@ -189,6 +157,7 @@ export class AtsService {
         priority: 'medium',
         description: '去除制表符/全角空格，保持文本流畅',
         reason: '避免 ATS 误判分栏或表格',
+        impact: 'ats_compatibility',
       });
     }
 
@@ -204,7 +173,7 @@ export class AtsService {
       });
     }
 
-    const atsCompatibility = scoreCompatibility(originalText, jdText);
+    const atsCompatibility = scoreCompatibility(originalText);
 
     return {
       optimizedResume: optimized,
