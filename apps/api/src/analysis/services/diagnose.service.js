@@ -1,6 +1,7 @@
 ﻿import { SkillMatchService } from './skill-match.service.js';
 import { CoreAbilityService } from './core-ability.service.js';
 import { CareerRiskService } from './career-risk.service.js';
+import { EducationMatchService } from './education-match.service.js';
 
 export class DiagnoseService {
   constructor() {
@@ -8,6 +9,7 @@ export class DiagnoseService {
       skill_match: new SkillMatchService(),
       core_ability: new CoreAbilityService(),
       career_risk: new CareerRiskService(),
+      education_match: new EducationMatchService(),
     };
   }
 
@@ -68,7 +70,8 @@ export class DiagnoseService {
     const names = {
       skill_match: "技能匹配度",
       core_ability: "核心能力呈现",
-      career_risk: "职业风险控制"
+      career_risk: "职业风险控制",
+      education_match: "教育背景匹配"
     };
     return names[dimension] || dimension;
   }
