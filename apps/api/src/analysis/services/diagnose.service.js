@@ -1,6 +1,7 @@
 ﻿import { ATSCompatibilityService } from './ats-compatibility.service.js';
 import { HardRequirementService } from './hard-requirement.service.js';
 import { KeywordDensityService } from './keyword-density.service.js';
+import { SkillMatchService } from './skill-match.service.js';
 import { BaseDimensionService } from './base-dimension.service.js';
 
 export class DiagnoseService {
@@ -9,6 +10,7 @@ export class DiagnoseService {
       ats_compatibility: new ATSCompatibilityService(),
       hard_requirements: new HardRequirementService(),
       keyword_density: new KeywordDensityService(),
+      skill_match: new SkillMatchService(),
       // 其他分析器将在后续添加
     };
   }
@@ -81,3 +83,6 @@ export class DiagnoseService {
     };
   }
 }
+
+
+
