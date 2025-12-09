@@ -1,88 +1,110 @@
-﻿import { ATSCompatibilityService } from './ats-compatibility.service.js';
-import { HardRequirementService } from './hard-requirement.service.js';
-import { KeywordDensityService } from './keyword-density.service.js';
-import { SkillMatchService } from './skill-match.service.js';
-import { BaseDimensionService } from './base-dimension.service.js';
+﻿import { SkillMatchService } from './skill-match.service.js';
+import { CoreAbilityService } from './core-ability.service.js';
 
 export class DiagnoseService {
   constructor() {
     this.analyzers = {
-      ats_compatibility: new ATSCompatibilityService(),
-      hard_requirements: new HardRequirementService(),
-      keyword_density: new KeywordDensityService(),
+      core_ability: new CoreAbilityService(),
       skill_match: new SkillMatchService(),
-      // 其他分析器将在后续添加
     };
   }
 
-  async runDiagnose(resumeText, jdText) {
-    console.log("=== DiagnoseService开始九维分析 ===");
+  async diagnose(resumeText, jdText) {
+    console.log("开始简历诊断分析...");
     
     const results = {};
-
-    // 顺序执行所有分析
+    
+    // 分析所有维度
     for (const [dimension, analyzer] of Object.entries(this.analyzers)) {
       try {
-        console.log(`开始分析: ${analyzer.displayName}`);
+        console.log(`分析维度: ${dimension}`);
         const result = await analyzer.analyze(resumeText, jdText);
         results[dimension] = result;
-        console.log(`✅ ${analyzer.displayName} 分析完成`);
       } catch (error) {
-        console.error(`❌ ${analyzer.displayName} 分析失败:`, error);
+        console.error(`维度 ${dimension} 分析失败:`, error);
         results[dimension] = this.createErrorResult(dimension, error);
       }
     }
-
-    // 按优先级排序输出
-    const orderedResults = {};
-    const priorityOrder = ['ats_compatibility', 'hard_requirements', 'keyword_density'];
     
-    priorityOrder.forEach(dim => {
-      if (results[dim]) {
-        orderedResults[dim] = results[dim];
-      }
-    });
-
-    // 添加其他维度（如果有）
-    Object.keys(results).forEach(dim => {
-      if (!priorityOrder.includes(dim)) {
-        orderedResults[dim] = results[dim];
-      }
-    });
-
-    console.log("=== 九维分析完成 ===");
-    return orderedResults;
-  }
-
-  createErrorResult(dimension, error) {
-    const errorMessages = {
-      ats_compatibility: "ATS兼容性分析失败",
-      hard_requirements: "硬性要求匹配分析失败",
-      keyword_density: "关键词密度分析失败"
+    // 生成总体报告
+    const overview = this.generateOverview(results);
+    
+    return {
+      overview,
+      dimensions: results
     };
-
+  }
+  
+  createErrorResult(dimension, error) {
     return {
       dimension,
-      display_name: errorMessages[dimension] || "分析失败",
+      display_name: this.getDisplayName(dimension),
       icon: "❌",
       color: "#ff4d4f",
       current_score: 0,
       current_grade: "D",
-      optimized_score: 50,
-      optimized_grade: "C",
-      status: "⏳ 待优化",
-      improvement_score: 50,
-      statement: `分析过程中出现错误: ${error.message}`,
-      directive_abstract: "系统错误，请稍后重试",
+      optimized_score: 0,
+      optimized_grade: "D",
+      status: "错误",
+      improvement_score: 0,
+      statement: {
+        pre_optimization: "分析失败",
+        post_optimization: "请重新尝试"
+      },
+      directive_abstract: "系统错误",
       issue_count: 1,
       issues: [{
-        penalty: 0,
-        description: "系统分析错误",
+        type: "analysis_error",
+        severity: "critical",
+        description: `分析失败: ${error.message}`,
         suggestion: "请联系技术支持"
       }]
     };
   }
+  
+  getDisplayName(dimension) {
+    const names = {
+      core_ability: "核心能力呈现",
+      skill_match: "技能匹配度"
+    };
+    return names[dimension] || dimension;
+  }
+  
+  generateOverview(results) {
+    const gradeCounts = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+    let totalScore = 0;
+    let dimensionCount = 0;
+    
+    Object.values(results).forEach(result => {
+      if (result.current_grade && gradeCounts.hasOwnProperty(result.current_grade)) {
+        gradeCounts[result.current_grade]++;
+      }
+      if (result.current_score) {
+        totalScore += result.current_score;
+        dimensionCount++;
+      }
+    });
+    
+    const finalScore = dimensionCount > 0 ? Math.round(totalScore / dimensionCount) : 0;
+    
+    // 估算改进效果
+    const warningCount = gradeCounts.D + gradeCounts.C;
+    let improvementEstimate = "无明显改进";
+    
+    if (warningCount > 2) {
+      improvementEstimate = "面试率+50%";
+    } else if (warningCount > 0) {
+      improvementEstimate = "面试率+30%";
+    } else if (gradeCounts.B > 0) {
+      improvementEstimate = "面试率+15%";
+    } else {
+      improvementEstimate = "保持优秀水平";
+    }
+    
+    return {
+      final_score: finalScore,
+      grade_summary: gradeCounts,
+      estimated_improvement: improvementEstimate
+    };
+  }
 }
-
-
-
