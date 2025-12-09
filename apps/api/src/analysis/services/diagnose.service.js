@@ -1,11 +1,13 @@
 ﻿import { SkillMatchService } from './skill-match.service.js';
 import { CoreAbilityService } from './core-ability.service.js';
+import { CareerRiskService } from './career-risk.service.js';
 
 export class DiagnoseService {
   constructor() {
     this.analyzers = {
-      core_ability: new CoreAbilityService(),
       skill_match: new SkillMatchService(),
+      core_ability: new CoreAbilityService(),
+      career_risk: new CareerRiskService(),
     };
   }
 
@@ -64,8 +66,9 @@ export class DiagnoseService {
   
   getDisplayName(dimension) {
     const names = {
+      skill_match: "技能匹配度",
       core_ability: "核心能力呈现",
-      skill_match: "技能匹配度"
+      career_risk: "职业风险控制"
     };
     return names[dimension] || dimension;
   }
