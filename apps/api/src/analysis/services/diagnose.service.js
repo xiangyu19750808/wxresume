@@ -1,4 +1,5 @@
 ﻿import { SkillMatchService } from './skill-match.service.js';
+import { FunctionMatchService } from './function-match.service.js';
 import { CoreAbilityService } from './core-ability.service.js';
 import { CareerRiskService } from './career-risk.service.js';
 import { EducationMatchService } from './education-match.service.js';
@@ -6,6 +7,7 @@ import { EducationMatchService } from './education-match.service.js';
 export class DiagnoseService {
   constructor() {
     this.analyzers = {
+      function_match: new FunctionMatchService(),
       skill_match: new SkillMatchService(),
       core_ability: new CoreAbilityService(),
       career_risk: new CareerRiskService(),
@@ -114,3 +116,4 @@ export class DiagnoseService {
     };
   }
 }
+
