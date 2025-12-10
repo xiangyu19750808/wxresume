@@ -34,7 +34,7 @@ export class DiagnoseController {
       console.log("处理后jdText长度:", fixedJdText.length);
 
       // 调用诊断服务
-      const result = await this.diagnoseService.runDiagnose(fixedResumeText, fixedJdText);
+      const result = await this.diagnoseService.diagnose(fixedResumeText, fixedJdText);
 
       res.json({
         success: true,
@@ -50,3 +50,5 @@ export class DiagnoseController {
     }
   }
 }
+
+
