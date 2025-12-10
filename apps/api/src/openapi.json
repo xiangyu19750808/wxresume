@@ -32,15 +32,18 @@
     },
     "/v1/jd/parse": {
       "post": {
-        "summary": "Parse JD (placeholder)",
+        "summary": "Parse JD text into structured data",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "jdText"
+                ],
                 "properties": {
-                  "raw_text": {
+                  "jdText": {
                     "type": "string"
                   }
                 }
@@ -50,7 +53,25 @@
         },
         "responses": {
           "200": {
-            "description": "ok"
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "msg": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ParsedJD"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -616,30 +637,57 @@
     },
     "/v1/results": {
       "get": {
-        "summary": "List results (memory)",
+        "summary": "List stored results (placeholder)",
         "responses": {
           "200": {
-            "description": "ok"
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
     },
     "/v1/results/{rid}": {
       "get": {
-        "summary": "Get result by id (memory)",
+        "summary": "Get stored result by id (placeholder)",
         "parameters": [
           {
             "name": "rid",
             "in": "path",
+            "required": true,
             "schema": {
               "type": "string"
-            },
-            "required": true
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "ok"
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
           },
           "404": {
             "description": "not found"
@@ -721,6 +769,168 @@
         }
       }
     },
+    "/v1/check": {
+      "post": {
+        "summary": "Resume and JD screening (placeholder)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resumeText": { "type": "string" },
+                  "jdText": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
+    "/v1/analysis/diagnose": {
+      "post": {
+        "summary": "Quick nine-dimension diagnose (placeholder)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "scores": { "type": "array", "items": { "type": "number" } },
+                    "anxietyCopy": { "type": "string" },
+                    "radar": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/analysis/deep": {
+      "post": {
+        "summary": "Deep analysis with optimization directives (placeholder)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dimensions": { "type": "array", "items": { "type": "number" } },
+                    "optimizationDirectives": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/resume/optimize": {
+      "post": {
+        "summary": "Resume optimization (placeholder)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "optimized_resume": { "type": "string" },
+                    "original_score": { "type": "number" },
+                    "optimized_score": { "type": "number" },
+                    "key_improvements": { "type": "array", "items": { "type": "string" } },
+                    "applied_changes": { "type": "array", "items": { "type": "object" } },
+                    "expected_pass_rate_increase": { "type": "string" },
+                    "risk_eliminated": { "type": "array", "items": { "type": "string" } },
+                    "checklist": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/resume/export": {
+      "post": {
+        "summary": "Resume export to PDF (placeholder)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fileId": { "type": "string" },
+                    "url": { "type": "string", "format": "uri" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/results": {
+      "get": {
+        "summary": "List stored results (placeholder)",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": { "type": "array", "items": { "type": "object" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/results/{rid}": {
+      "get": {
+        "summary": "Get stored result by id (placeholder)",
+        "parameters": [
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": { "type": "object" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "not found" }
+        }
+      }
+    },
     "/v1/openapi.json": {
       "get": {
         "summary": "Serve OpenAPI spec",
@@ -738,6 +948,159 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "ParsedJD": {
+        "type": "object",
+        "properties": {
+          "rawText": {
+            "type": "string"
+          },
+          "degreeRequired": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "experienceYears": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "certificates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mustHaveSkills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "jdKeywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "jdResponsibilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "qualityScore": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "D"
+            ]
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "rawText",
+          "certificates",
+          "mustHaveSkills",
+          "jdKeywords",
+          "jdResponsibilities",
+          "qualityScore",
+          "warnings"
+        ]
+      },
+      "ScreeningResult": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "warning",
+              "error"
+            ]
+          },
+          "screening_passed": {
+            "type": "boolean"
+          },
+          "warnings": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "jd_quality": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "D"
+            ]
+          },
+          "resume_quality": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "D"
+            ]
+          },
+          "hard_requirement_match": {
+            "type": "number"
+          },
+          "hardCheckResult": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "jdValue": {
+                  "type": "string"
+                },
+                "resumeValue": {
+                  "type": "string"
+                },
+                "match": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "match_score": {
+            "type": "number"
+          },
+          "next_step": {
+            "type": "string",
+            "enum": [
+              "proceed_to_optimization",
+              "user_input_required",
+              "reject"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "required_action": {
+            "type": "string"
+          }
+        }
       }
     }
   }
