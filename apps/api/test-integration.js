@@ -19,7 +19,7 @@ async function testAllThreeModules() {
     const diagnoseService = new DiagnoseService();
     
     // 运行九维分析（目前只有三个模块）
-    const results = await diagnoseService.runDiagnose(resumeText, jdText);
+    const results = await diagnoseService.diagnose(resumeText, jdText);
     
     console.log("\n=== 测试结果 ===");
     console.log("成功分析维度数量:", Object.keys(results).length);
@@ -89,3 +89,4 @@ testAllThreeModules().then(results => {
     process.exit(1);
   }
 });
+
