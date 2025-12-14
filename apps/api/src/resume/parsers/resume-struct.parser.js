@@ -1,0 +1,246 @@
+import { fromPlainText } from '../../check/parsers/resume.parser.js';
+
+const SECTION_KEYWORDS = {
+  education: ['教育背景', '教育', 'education'],
+  experience: ['工作经历', '工作经验', '项目经历', '项目经验', 'experience'],
+  skills: ['技能', 'skills', 'skill'],
+  certificates: ['证书', 'certification', 'certifications', 'cert'],
+  languages: ['语言', 'languages', 'language'],
+};
+
+function detectSection(line) {
+  const normalized = line.trim().toLowerCase();
+  for (const [key, keywords] of Object.entries(SECTION_KEYWORDS)) {
+    if (keywords.some((kw) => normalized.startsWith(kw.toLowerCase()))) {
+      return key;
+    }
+  }
+  return null;
+}
+
+function buildSections(text) {
+  const sections = new Map();
+  let current = 'body';
+  sections.set(current, []);
+
+  for (const rawLine of text.split(/\n+/)) {
+    const line = rawLine.trim();
+    const section = detectSection(line);
+    if (section) {
+      current = section;
+      if (!sections.has(section)) sections.set(section, []);
+      continue;
+    }
+    const bucket = sections.get(current) || [];
+    bucket.push(line);
+    sections.set(current, bucket);
+  }
+
+  return sections;
+}
+
+function unique(list) {
+  return Array.from(new Set(list.filter(Boolean)));
+}
+
+function normalizeDate(value) {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (!trimmed || /^至今|现在$/i.test(trimmed)) return 'present';
+  return trimmed.replace(/[年.]/g, '-');
+}
+
+function extractName(lines) {
+  const first = (lines[0] || '').trim();
+  if (!first) return '';
+  if (/^[\u4e00-\u9fa5]{2,4}$/.test(first)) return first;
+  if (/^[A-Za-z]+(?:\s+[A-Za-z]+){1,2}$/.test(first)) return first;
+  return '';
+}
+
+function extractPhone(text) {
+  const patterns = [
+    /(\+?86[-\s]?)?(1[3-9]\d{9})/, // CN mobile
+    /\+?\d[\d\s-]{7,14}/, // generic international
+    /0\d{2,3}-?\d{7,8}/, // landline
+  ];
+  for (const re of patterns) {
+    const match = text.match(re);
+    if (match?.[0]) return match[0];
+  }
+  return '';
+}
+
+function extractEmail(text) {
+  const match = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+  return match?.[0] || '';
+}
+
+function extractLinks(text) {
+  const matches = text.match(/https?:\/\/[\w.-]+(?:\:[0-9]+)?[\w\-\.\/?#%&=+~]*/gi) || [];
+  const extras = text.match(/(linkedin\.com\/[^\s]+|zhihu\.com\/people\/[^\s]+|github\.com\/[^\s]+)/gi) || [];
+  return unique([...matches, ...extras]);
+}
+
+function extractLocation(lines) {
+  const candidates = lines.slice(0, 5);
+  for (const line of candidates) {
+    const match = line.match(/(北京|上海|广州|深圳|杭州|成都|武汉|南京|苏州|西安|长沙|重庆|天津|青岛)/);
+    if (match?.[0]) return match[0];
+  }
+  return '';
+}
+
+function parseEducation(sectionText) {
+  if (!sectionText.trim()) return [];
+  const blocks = sectionText.split(/\n{2,}/).filter(Boolean);
+  return blocks.map((block) => {
+    const schoolMatch = block.match(/[\p{L}\d·\s]{2,}(大学|学院|University|College)/iu);
+    const degreeMatch = block.match(/(博士|硕士|学士|本科|大专|Ph\.D|Master|Bachelor|Associate)/i);
+    const majorMatch = block.match(/专业[:：]?([^\n]+)/);
+    const timeMatch = block.match(/(\d{4}[./年-]?\d{1,2}?)(?:\s*[~至到\-—]+\s*(\d{4}[./年-]?\d{1,2}|至今|现在|present|Present))?/);
+    return {
+      school: schoolMatch?.[0]?.trim() || '',
+      degree: degreeMatch?.[0]?.trim() || '',
+      major: majorMatch?.[1]?.trim() || '',
+      start: normalizeDate(timeMatch?.[1] || ''),
+      end: normalizeDate(timeMatch?.[2] || ''),
+    };
+  });
+}
+
+function parseExperience(sectionText) {
+  if (!sectionText.trim()) return [];
+  const segments = sectionText
+    .split(/\n{2,}|(?=\d{4}[./年-]?\d{1,2})/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  return segments.map((segment) => {
+    const timeMatch = segment.match(/(\d{4}[./年-]?\d{1,2}?)(?:\s*[~至到\-—]+\s*(\d{4}[./年-]?\d{1,2}|至今|现在|present|Present))?/);
+    const lines = segment.split(/\n+/).filter(Boolean);
+    const companyLine = lines[0] || '';
+    const titleMatch = segment.match(/(职位|岗位|担任|角色)[:：]?([^\n]+)/);
+    const highlights = lines
+      .filter((line) => /^[-•·]/.test(line.trim()))
+      .map((line) => line.replace(/^[-•·]\s?/, '').trim())
+      .filter(Boolean);
+
+    return {
+      company: companyLine.replace(timeMatch?.[0] || '', '').trim(),
+      title: titleMatch?.[2]?.trim() || '',
+      start: normalizeDate(timeMatch?.[1] || ''),
+      end: normalizeDate(timeMatch?.[2] || ''),
+      highlights,
+    };
+  });
+}
+
+function extractTopTokens(text, limit = 30) {
+  const tokens = text.match(/[A-Za-z][A-Za-z0-9.+/#-]{1,}/g) || [];
+  const freq = new Map();
+  for (const token of tokens) {
+    freq.set(token, (freq.get(token) || 0) + 1);
+  }
+  return [...freq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([token]) => token);
+}
+
+function parseSkills(sectionText, fullText) {
+  const source = sectionText.trim() ? sectionText : fullText;
+  if (!source.trim()) return [];
+  const raw = source
+    .split(/[\n,;，；]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .flatMap((line) => line.match(/[A-Za-z][A-Za-z0-9.+/#-]{1,}|[\u4e00-\u9fa5]{2,}/g) || []);
+
+  const cleaned = unique(raw.map((item) => item.trim())).filter(Boolean);
+  if (cleaned.length) return cleaned.slice(0, 30);
+  return extractTopTokens(fullText, 30);
+}
+
+function parseCertificates(sectionText, fullText) {
+  const keywords = ['PMP', 'CPA', 'CFA', '软考', '中级', '高级工程师', '微软认证', '华为认证'];
+  const text = `${sectionText}\n${fullText}`;
+  const matches = new Set();
+
+  if (/证书|certification|certifications|cert/i.test(text)) {
+    const lines = sectionText.split(/\n+/).filter(Boolean);
+    for (const line of lines) {
+      if (line.length < 3) continue;
+      if (/证/.test(line) || /cert/i.test(line)) matches.add(line.trim());
+      for (const kw of keywords) {
+        if (line.toLowerCase().includes(kw.toLowerCase())) matches.add(kw);
+      }
+    }
+  }
+
+  for (const kw of keywords) {
+    if (text.toLowerCase().includes(kw.toLowerCase())) matches.add(kw);
+  }
+
+  return Array.from(matches);
+}
+
+function parseLanguages(sectionText, fullText) {
+  const text = `${sectionText}\n${fullText}`;
+  const entries = [];
+  const patterns = [
+    [/英语|english/i, 'English'],
+    [/法语|french/i, 'French'],
+    [/日语|japanese/i, 'Japanese'],
+  ];
+
+  for (const [re, name] of patterns) {
+    if (re.test(text)) {
+      const levelMatch = text.match(/(CET[- ]?(4|6)|IELTS\s?\d\.\d|TOEFL\s?\d{2,3}|六级|四级)/i);
+      entries.push({ name, level: levelMatch?.[0] || '' });
+    }
+  }
+
+  return entries;
+}
+
+export class ResumeStructParser {
+  parse(resumeText) {
+    const normalized = fromPlainText(resumeText || '');
+    const lines = normalized.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    const sections = buildSections(normalized);
+
+    const basic_info = {
+      name: extractName(lines),
+      phone: extractPhone(normalized),
+      email: extractEmail(normalized),
+      location: extractLocation(lines),
+      links: extractLinks(normalized),
+    };
+
+    const educationText = (sections.get('education') || []).join('\n');
+    const experienceText = (sections.get('experience') || []).join('\n');
+    const skillsText = (sections.get('skills') || []).join('\n');
+    const certificateText = (sections.get('certificates') || []).join('\n');
+    const languageText = (sections.get('languages') || []).join('\n');
+
+    const resumeParsed = {
+      basic_info,
+      education: parseEducation(educationText),
+      experience: parseExperience(experienceText),
+      skills: parseSkills(skillsText, normalized),
+      certificates: parseCertificates(certificateText, normalized),
+      languages: parseLanguages(languageText, normalized),
+    };
+
+    const warnings = [];
+    if (!basic_info.phone || !basic_info.email) {
+      warnings.push({ code: 'missing_contact', message: '联系方式缺失：请提供手机号或邮箱' });
+    }
+    if (resumeParsed.skills.length === 0) {
+      warnings.push({ code: 'skills_missing', message: '未检测到技能信息，请补充技能段落' });
+    }
+
+    return { resumeParsed, warnings };
+  }
+}

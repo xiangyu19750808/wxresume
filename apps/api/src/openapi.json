@@ -834,6 +834,128 @@
         }
       }
     },
+    "/v1/resume/parse": {
+      "post": {
+        "summary": "Parse resume file or text into structured fields",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resumeFile": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Resume file (PDF/Word)"
+                  }
+                },
+                "required": ["resumeFile"]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resumeText": { "type": "string" }
+                },
+                "required": ["resumeText"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Parsed resume payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer", "example": 0 },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "resumeText": { "type": "string" },
+                        "resumeParsed": {
+                          "type": "object",
+                          "properties": {
+                            "basic_info": {
+                              "type": "object",
+                              "properties": {
+                                "name": { "type": "string" },
+                                "phone": { "type": "string" },
+                                "email": { "type": "string" },
+                                "location": { "type": "string" },
+                                "links": { "type": "array", "items": { "type": "string" } }
+                              }
+                            },
+                            "education": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "school": { "type": "string" },
+                                  "degree": { "type": "string" },
+                                  "major": { "type": "string" },
+                                  "start": { "type": "string" },
+                                  "end": { "type": "string" }
+                                }
+                              }
+                            },
+                            "experience": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "company": { "type": "string" },
+                                  "title": { "type": "string" },
+                                  "start": { "type": "string" },
+                                  "end": { "type": "string" },
+                                  "highlights": { "type": "array", "items": { "type": "string" } }
+                                }
+                              }
+                            },
+                            "skills": { "type": "array", "items": { "type": "string" } },
+                            "certificates": { "type": "array", "items": { "type": "string" } },
+                            "languages": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": { "type": "string" },
+                                  "level": { "type": "string" }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "warnings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "code": { "type": "string" },
+                              "message": { "type": "string" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request: resume_missing | resume_too_short | unsupported_file_type"
+          },
+          "500": {
+            "description": "parse_failed"
+          }
+        }
+      }
+    },
     "/v1/resume/optimize": {
       "post": {
         "summary": "Resume optimization (placeholder)",
