@@ -12,6 +12,7 @@ import { createUsersRouter } from './modules/users/index.js';
 import { createFileRouter } from './modules/file/index.js';
 import { createResultsRouter } from './modules/results/index.js';
 import { createDiagnoseRouter } from './analysis/index.js';
+import { createResumeRouter } from './resume/index.js';
 import { reqid } from './middlewares/reqid.js';
 import jwtMiddleware from './middlewares/jwt.js';
 
@@ -875,6 +876,7 @@ app.use(createFileRouter());
 app.use(createResultsRouter());
 app.use('/v1/analysis', createDiagnoseRouter());
 app.use(createUsersRouter());
+app.use('/v1/resume', createResumeRouter());
 
 // -------------------------------
 // 微信回调路由：发放 JWT

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret";
+process.env.E2E_LIGHT = process.env.E2E_LIGHT || "1";
 
 const { registerUsersModule } = await import("./index.js");
 const { prisma } = await import("../../db.js");
