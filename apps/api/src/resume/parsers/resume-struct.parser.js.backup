@@ -1,4 +1,4 @@
-﻿import { fromPlainText } from '../../check/parsers/resume.parser.js';
+import { fromPlainText } from '../../check/parsers/resume.parser.js';
 
 const SECTION_KEYWORDS = {
   education: ['教育背景', '教育', 'education'],
@@ -47,7 +47,7 @@ function normalizeDate(value) {
   if (!value) return '';
   const trimmed = value.trim();
   if (!trimmed || /^至今|现在$/i.test(trimmed)) return 'present';
-  return trimmed.replace(/[年]/g, '-');
+  return trimmed.replace(/[年.]/g, '-');
 }
 
 function extractName(lines) {
@@ -60,9 +60,9 @@ function extractName(lines) {
 
 function extractPhone(text) {
   const patterns = [
-    /(\+?86[-\s]?)?(1[3-9]\d{9})/,
-    /\+?\d[\d\s-]{7,14}/,
-    /0\d{2,3}-?\d{7,8}/,
+    /(\+?86[-\s]?)?(1[3-9]\d{9})/, // CN mobile
+    /\+?\d[\d\s-]{7,14}/, // generic international
+    /0\d{2,3}-?\d{7,8}/, // landline
   ];
   for (const re of patterns) {
     const match = text.match(re);
@@ -95,10 +95,10 @@ function parseEducation(sectionText) {
   if (!sectionText.trim()) return [];
   const blocks = sectionText.split(/\n{2,}/).filter(Boolean);
   return blocks.map((block) => {
-    const schoolMatch = block.match(/[\p{L}\d路\s]{2,}(大学|学院|University|College)/iu);
-    const degreeMatch = block.match(/(博士|硕士|学士|本科|研究生|专科|中专|Ph\.D|Master|Bachelor|Associate)/i);
+    const schoolMatch = block.match(/[\p{L}\d·\s]{2,}(大学|学院|University|College)/iu);
+    const degreeMatch = block.match(/(博士|硕士|学士|本科|大专|Ph\.D|Master|Bachelor|Associate)/i);
     const majorMatch = block.match(/专业[:：]?([^\n]+)/);
-    const timeMatch = block.match(/(\d{4}[./年]?\d{1,2}?)(?:\s*[~至到\-—\~+]?\s*(\d{4}[./年]?\d{1,2}|至今|现在|present|Present))?/);
+    const timeMatch = block.match(/(\d{4}[./年-]?\d{1,2}?)(?:\s*[~至到\-—]+\s*(\d{4}[./年-]?\d{1,2}|至今|现在|present|Present))?/);
     return {
       school: schoolMatch?.[0]?.trim() || '',
       degree: degreeMatch?.[0]?.trim() || '',
@@ -112,18 +112,18 @@ function parseEducation(sectionText) {
 function parseExperience(sectionText) {
   if (!sectionText.trim()) return [];
   const segments = sectionText
-    .split(/\n{2,}|(?=\d{4}[./年]?\d{1,2})/)
+    .split(/\n{2,}|(?=\d{4}[./年-]?\d{1,2})/)
     .map((s) => s.trim())
     .filter(Boolean);
 
   return segments.map((segment) => {
-    const timeMatch = segment.match(/(\d{4}[./年]?\d{1,2}?)(?:\s*[~至到\-—\~+]?\s*(\d{4}[./年]?\d{1,2}|至今|现在|present|Present))?/);
+    const timeMatch = segment.match(/(\d{4}[./年-]?\d{1,2}?)(?:\s*[~至到\-—]+\s*(\d{4}[./年-]?\d{1,2}|至今|现在|present|Present))?/);
     const lines = segment.split(/\n+/).filter(Boolean);
     const companyLine = lines[0] || '';
     const titleMatch = segment.match(/(职位|岗位|担任|角色)[:：]?([^\n]+)/);
     const highlights = lines
-      .filter((line) => /^[-•·*▪▫]/.test(line.trim()))
-      .map((line) => line.replace(/^[-•·*▪▫\s]+/, '').trim())
+      .filter((line) => /^[-•·]/.test(line.trim()))
+      .map((line) => line.replace(/^[-•·]\s?/, '').trim())
       .filter(Boolean);
 
     return {
