@@ -9,7 +9,7 @@ export async function parseResumeFromFile(filePath, mimeType) {
   const actualMime = fileType?.mime || mimeType;
   
   // 文本编码检测
-  const encoding = await detectEncoding(buffer);
+  const encoding = detectEncoding(buffer);
   
   // 根据文件类型选择解析器
   if (actualMime === 'application/pdf') {
@@ -43,6 +43,10 @@ async function detectEncoding(buffer) {
     console.warn('[resume.parser] encoding detection failed:', err.message);
     return 'utf-8';
   }
+} catch (err) {
+    console.warn('[resume.parser] encoding detection failed:', err.message);
+    return 'utf-8';
+  }
 }
 
 async function parsePDF(buffer, encoding) {
@@ -58,11 +62,15 @@ async function parsePDF(buffer, encoding) {
     console.warn('[resume.parser] pdf-parse failed, trying pdfjs-dist:', err.message);
   }
   
-  // 方法2: 尝试pdfjs-dist (更强大) - 简化版避免worker问题
+  // 方法2: 尝试pdfjs-dist (更强大)
   try {
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfjsWorker = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
     
-    // 简化：不使用worker，直接解析
+    // 设置worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker.default || pdfjsWorker;
+    
+    // 加载PDF文档
     const loadingTask = pdfjsLib.getDocument({ data: buffer });
     const pdfDocument = await loadingTask.promise;
     
@@ -100,10 +108,7 @@ async function parseDOCX(buffer, encoding) {
 async function parseDOC(buffer, encoding) {
   // 方法1: 使用textract (如果安装成功)
   try {
-    // 动态导入textract
-    const textractModule = await import('textract');
-    const textract = textractModule.default || textractModule;
-    
+    const textract = require('textract');
     return await new Promise((resolve, reject) => {
       textract.fromBufferWithMime('application/msword', buffer, (error, text) => {
         if (error) {
@@ -179,3 +184,4 @@ export class ResumeParser {
     return { sections: [], raw: normalizeResumeText(resumeText) };
   }
 }
+
