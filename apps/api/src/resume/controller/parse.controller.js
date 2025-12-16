@@ -35,94 +35,111 @@ const ALLOWED_MIME_TYPES = new Set([
 export class ParseController {
     async handleParse(req, res) {
     const contentType = req.headers['content-type'] || '';
-    
+
     // ========== 新增：Base64 JSON格式支持 ==========
     if (contentType.includes('application/json')) {
       try {
         const body = req.body;
-        
-        if (!body || !body.file_content) {
-          return res.status(400).json({
-            code: 1,
-            msg: 'missing_file_content',
-            data: { reason: '缺少文件内容(file_content字段)' }
-          });
-        }
-        
-        // Base64解码
-        let fileBuffer;
-        try {
-          // 处理 data:application/pdf;base64,JVBERi0xLjQK... 格式
-          let base64Content = body.file_content;
-          if (base64Content.includes('base64,')) {
-            base64Content = base64Content.split('base64,')[1];
-          }
-          fileBuffer = Buffer.from(base64Content, 'base64');
-        } catch (decodeError) {
-          return res.status(400).json({
-            code: 1,
-            msg: 'invalid_base64',
-            data: { reason: `Base64格式错误` }
-          });
-        }
-        
-        // 文件大小限制 (10MB)
-        if (fileBuffer.length > 10 * 1024 * 1024) {
-          return res.status(400).json({
-            code: 1,
-            msg: 'file_too_large',
-            data: { reason: '文件大小超过10MB限制' }
-          });
-        }
-        
-        // 确定MIME类型
-        let mimeType = body.file_type || 'application/octet-stream';
-        if (!ALLOWED_MIME_TYPES.has(mimeType) && body.file_name) {
-          const ext = path.extname(body.file_name).toLowerCase();
-          if (ext === '.pdf') mimeType = 'application/pdf';
-          else if (ext === '.docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-          else if (ext === '.doc') mimeType = 'application/msword';
-        }
-        
-        if (!ALLOWED_MIME_TYPES.has(mimeType)) {
-          return res.status(400).json({
-            code: 1,
-            msg: 'unsupported_file_type',
-            data: { reason: `不支持的文件类型: ${mimeType}` }
-          });
-        }
-        
-        // 临时保存并解析
-        const fileId = Date.now() + Math.random().toString(36).substr(2, 9);
-        const tempFilePath = path.join(UPLOAD_DIR, `${fileId}.tmp`);
-        fs.writeFileSync(tempFilePath, fileBuffer);
-        
-        try {
-          const resumeText = await parseResumeFromFile(tempFilePath, mimeType);
+
+        // 支持两种JSON格式：1. resumeText 2. file_content (Base64)
+        if (body.resumeText) {
+          // 直接处理文本简历
+          const resumeText = fromPlainText(body.resumeText);
           
           if (!resumeText || resumeText.length < 50) {
-            fs.unlinkSync(tempFilePath);
             return res.status(400).json({
               code: 1,
               msg: 'resume_too_short',
               data: { reason: '简历内容过短或无法解析' }
             });
           }
-          
+
           const result = parseResumeService.parse(resumeText);
-          fs.unlinkSync(tempFilePath);
           return res.json({ code: 0, data: result });
-          
-        } catch (parseError) {
-          if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-          console.error('[resume.parse] Base64解析失败', parseError);
-          return res.status(500).json({
+
+        } else if (body.file_content) {
+          // Base64解码
+          let fileBuffer;
+          try {
+            // 处理 data:application/pdf;base64,JVBERi0xLjQK... 格式
+            let base64Content = body.file_content;
+            if (base64Content.includes('base64,')) {
+              base64Content = base64Content.split('base64,')[1];
+            }
+            fileBuffer = Buffer.from(base64Content, 'base64');
+          } catch (decodeError) {
+            return res.status(400).json({
+              code: 1,
+              msg: 'invalid_base64',
+              data: { reason: `Base64格式错误` }
+            });
+          }
+
+          // 文件大小限制 (10MB)
+          if (fileBuffer.length > 10 * 1024 * 1024) {
+            return res.status(400).json({
+              code: 1,
+              msg: 'file_too_large',
+              data: { reason: '文件大小超过10MB限制' }
+            });
+          }
+
+          // 确定MIME类型
+          let mimeType = body.file_type || 'application/octet-stream';
+          if (!ALLOWED_MIME_TYPES.has(mimeType) && body.file_name) {
+            const ext = path.extname(body.file_name).toLowerCase();
+            if (ext === '.pdf') mimeType = 'application/pdf';
+            else if (ext === '.docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            else if (ext === '.doc') mimeType = 'application/msword';
+          }
+
+          if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+            return res.status(400).json({
+              code: 1,
+              msg: 'unsupported_file_type',
+              data: { reason: `不支持的文件类型: ${mimeType}` }
+            });
+          }
+
+          // 临时保存并解析
+          const fileId = Date.now() + Math.random().toString(36).substr(2, 9);
+          const tempFilePath = path.join(UPLOAD_DIR, `${fileId}.tmp`);
+          fs.writeFileSync(tempFilePath, fileBuffer);
+
+          try {
+            const resumeText = await parseResumeFromFile(tempFilePath, mimeType);
+
+            if (!resumeText || resumeText.length < 50) {
+              fs.unlinkSync(tempFilePath);
+              return res.status(400).json({
+                code: 1,
+                msg: 'resume_too_short',
+                data: { reason: '简历内容过短或无法解析' }
+              });
+            }
+
+            const result = parseResumeService.parse(resumeText);
+            fs.unlinkSync(tempFilePath);
+            return res.json({ code: 0, data: result });
+
+          } catch (parseError) {
+            if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+            console.error('[resume.parse] Base64解析失败', parseError);
+            return res.status(500).json({
+              code: 1,
+              msg: 'parse_failed',
+              data: { reason: '文件解析失败' }
+            });
+          }
+        } else {
+          // 两种格式都没有提供
+          return res.status(400).json({
             code: 1,
-            msg: 'parse_failed',
-            data: { reason: '文件解析失败' }
+            msg: 'missing_content',
+            data: { reason: '请提供 resumeText 或 file_content 字段' }
           });
         }
-        
+
       } catch (error) {
         console.error('[resume.parse] Base64处理异常', error);
         return res.status(500).json({
@@ -133,7 +150,7 @@ export class ParseController {
       }
     }
     // ========== Base64支持结束 ==========
-    
+
     // 原有的multipart/form-data支持逻辑（保持不变）
     await multerPromise;
     uploadResumeMiddleware(req, res, async (err) => {
@@ -172,4 +189,3 @@ export class ParseController {
     });
   }
 }
-

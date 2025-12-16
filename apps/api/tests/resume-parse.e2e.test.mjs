@@ -1,4 +1,4 @@
-import assert from 'node:assert';
+﻿import assert from 'node:assert';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -64,12 +64,12 @@ function waitForReady(proc) {
 }
 
 async function callResumeParse() {
+  // 两种格式都支持：直接resumeText或Base64
   const response = await fetch(`http://127.0.0.1:${PORT}/v1/resume/parse`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      resumeText:
-        '张三\n教育背景：2015-2019 北京大学 本科 计算机科学\n工作经历：2020-2023 腾讯 前端开发\n技能：Node.js, MongoDB, React',
+      resumeText: '张三\n教育背景: 2015-2019 北京大学 本科 计算机科学\n工作经历: 2020-2023 腾讯 前端开发\n技能: Node.js, MongoDB, React',
     }),
   });
   const payload = await response.json();
