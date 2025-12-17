@@ -8,47 +8,96 @@ export class DiagnoseController {
 
   async handleDiagnose(req, res) {
     try {
-      console.log("=== 🛠️ DiagnoseController开始处理 ===");
+      const { resumeText = '', jdText = '' } = req.body || {};
 
-      const { resumeText, jdText } = req.body;
+      // ✅ 这里按你当前 DiagnoseService 的方法名：diagnose
+      const result = await this.diagnoseService.diagnose(resumeText, jdText);
 
-      // 显示原始接收内容
-      console.log("原始resumeText长度:", resumeText?.length);
-      console.log("原始jdText长度:", jdText?.length);
-      
-      // 简单显示前50字符，检查编码
-      console.log("resumeText前50字符:", resumeText?.substring(0, 50));
-      console.log("jdText前50字符:", jdText?.substring(0, 50));
-      
-      // 检查是否有问号问题
-      if (resumeText) {
-        const qCount = (resumeText.match(/\?/g) || []).length;
-        console.log(`resumeText问号数: ${qCount}/${resumeText.length} (${((qCount/resumeText.length)*100).toFixed(1)}%)`);
-      }
+      const gs = result?.overview?.grade_summary || {};
+      const current_score = result?.overview?.final_score ?? null;
 
-      // 直接使用原始文本（让分析器处理）
-      const fixedResumeText = resumeText || '';
-      const fixedJdText = jdText || '';
+      // ✅ dims：兼容 object / array
+      const dims = Array.isArray(result?.dimensions)
+        ? result.dimensions
+        : Object.values(result?.dimensions || {});
 
-      console.log("处理后resumeText长度:", fixedResumeText.length);
-      console.log("处理后jdText长度:", fixedJdText.length);
+      // ✅ 第3步+第4步：optimized_* → preview_*；statement 统一对象；A/S pre_optimization 置空
+      const mapToPreview = (d) => {
+        if (!d) return d;
 
-      // 调用诊断服务
-      const result = await this.diagnoseService.diagnose(fixedResumeText, fixedJdText);
+        const { optimized_score, optimized_grade, statement, ...rest } = d;
+        const current_grade = rest.current_grade; // 保留 current_grade 给前端用
+
+        let normalizedStatement = statement;
+
+        if (typeof statement === 'string') {
+          const isAS = current_grade === 'A' || current_grade === 'S';
+          normalizedStatement = {
+            pre_optimization: isAS ? null : statement,
+            post_optimization: statement,
+          };
+        } else if (statement && typeof statement === 'object') {
+          const isAS = current_grade === 'A' || current_grade === 'S';
+          normalizedStatement = {
+            pre_optimization: isAS ? null : (statement.pre_optimization ?? null),
+            post_optimization: statement.post_optimization ?? null,
+          };
+        }
+
+        if (!normalizedStatement) {
+          normalizedStatement = { pre_optimization: null, post_optimization: null };
+        }
+
+        return {
+          ...rest, // ✅ 保留 current_grade / current_score 等原字段
+          statement: normalizedStatement,
+          preview_score: optimized_score ?? null,
+          preview_grade: optimized_grade ?? null,
+        };
+      };
+
+      // ✅ preview_score：从 optimized_score（或 current_score）算最大值
+      const preview_score =
+        dims.length > 0
+          ? Math.max(...dims.map((d) => d?.optimized_score ?? d?.current_score ?? 0))
+          : null;
 
       res.json({
-        success: true,
-        data: result
-      });
+        code: 0,
+        msg: 'ok',
+        data: {
+          overview: {
+            current_score,
+            preview_score,
+            preview_grade: null,
+            d_count: gs.D || 0,
+            c_count: gs.C || 0,
+            b_count: gs.B || 0,
+            a_count: gs.A || 0,
+            s_count: gs.S || 0,
+            dimension_count: result?.overview?.dimension_count ?? dims.length,
+            estimated_improvement: result?.overview?.estimated_improvement ?? null,
+            has_critical_issues: result?.overview?.has_critical_issues ?? false,
+          },
 
+          // ✅ dimensions：数组 + preview_* 映射（不再暴露 optimized_*）
+          dimensions: dims.map(mapToPreview),
+
+          // ✅ 第6步：deliverable（支付后才有）
+          deliverable: {
+            resume_pdf: null,
+            resume_docx: null,
+            download_url: null,
+          },
+        },
+      });
     } catch (error) {
       console.error('DiagnoseController.handleDiagnose错误:', error);
       res.status(500).json({
-        success: false,
-        error: error.message
+        code: 500,
+        msg: 'diagnose_failed',
+        error: error?.message || 'unknown_error',
       });
     }
   }
 }
-
-
