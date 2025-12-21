@@ -880,8 +880,9 @@ app.use(createResultsRouter());
 app.use('/v1/analysis', createDiagnoseRouter());
 app.use(createUsersRouter());
 app.use('/v1/resume', createResumeRouter());
-app.use('/v1/pay', createPayRouter());
-
+if (process.env.NODE_ENV !== 'test' && process.env.ENABLE_PAY !== 'false') {
+  app.use('/v1/pay', createPayRouter());
+}
 
 // -------------------------------
 // 微信回调路由：发放 JWT
