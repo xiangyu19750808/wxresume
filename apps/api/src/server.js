@@ -13,8 +13,11 @@ import { createFileRouter } from './modules/file/index.js';
 import { createResultsRouter } from './modules/results/index.js';
 import { createDiagnoseRouter } from './analysis/index.js';
 import { createResumeRouter } from './resume/index.js';
+import { createPayRouter } from './pay/index.js';
+
 import { reqid } from './middlewares/reqid.js';
 import jwtMiddleware from './middlewares/jwt.js';
+
 
 // 模板/渲染工具
 import {
@@ -877,6 +880,8 @@ app.use(createResultsRouter());
 app.use('/v1/analysis', createDiagnoseRouter());
 app.use(createUsersRouter());
 app.use('/v1/resume', createResumeRouter());
+app.use('/v1/pay', createPayRouter());
+
 
 // -------------------------------
 // 微信回调路由：发放 JWT
