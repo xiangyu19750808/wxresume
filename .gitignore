@@ -65,3 +65,9 @@ Thumbs.db
 files/
 resume.pdf
 sample.pdf
+
+# wxpay secrets
+apps/api/wxpay/
+apps/api/.env.bak*
+apps/api/.env.bak.*
+tmp/
