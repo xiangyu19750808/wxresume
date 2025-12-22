@@ -2,6 +2,8 @@ import express from 'express';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { createWxpayClient } from './wxpay.js';
+import { signJsapiParams } from './wxpay.client.js';
+
 
 let prismaPromise;
 
