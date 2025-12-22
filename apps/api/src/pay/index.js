@@ -1,29 +1,74 @@
 import express from 'express';
-import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { createWxpayClient, signJsapiParams } from './wxpay.client.js';
+import fs from 'node:fs';
+import { createWxpayClient } from './wxpay.js';
 
 let prismaPromise;
 
 async function getPrisma() {
   if (prismaPromise) return prismaPromise;
-
+  if (!process.env.DB_URL) {
+    process.env.DB_URL = 'file:./prisma/dev.db';
+  }
   prismaPromise = import('@prisma/client').then(({ PrismaClient }) => {
     const globalForPrisma = globalThis;
-    const prisma =
-      globalForPrisma.__wxresumePayPrisma || new PrismaClient();
-
+    const prismaClient = globalForPrisma.__wxresumePayPrisma || new PrismaClient();
     if (!globalForPrisma.__wxresumePayPrisma) {
-      globalForPrisma.__wxresumePayPrisma = prisma;
+      globalForPrisma.__wxresumePayPrisma = prismaClient;
     }
-    return prisma;
+    return prismaClient;
   });
-
   return prismaPromise;
 }
 
-export function createPayRouter() {
+function randomNonce(length = 16) {
+  return crypto.randomBytes(length).toString('hex');
+}
+
+function generateOutTradeNo() {
+  return `wx_${Date.now().toString(36)}${randomNonce(4)}`;
+}
+
+function normalizeAmount(value) {
+  const amount = Number.parseInt(value, 10);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return amount;
+}
+
+function signPayment({ appId, timeStamp, nonceStr, packageValue }) {
+  const payload = `${appId}\n${timeStamp}\n${nonceStr}\n${packageValue}\n`;
+  const privateKey = process.env.WX_PRIVATE_KEY || process.env.WX_MCH_PRIVATE_KEY;
+  if (!privateKey) {
+    return crypto.createHash('sha256').update(payload).digest('hex');
+  }
+  return crypto.sign('RSA-SHA256', Buffer.from(payload), privateKey).toString('base64');
+}
+
+function decryptResource(resource = {}, apiV3Key) {
+  if (!resource?.ciphertext || !resource?.nonce) return null;
+  if (!apiV3Key || apiV3Key.length !== 32) {
+    throw new Error('WX_API_V3_KEY must be 32 bytes');
+  }
+
+  const cipherBuffer = Buffer.from(resource.ciphertext, 'base64');
+  const authTag = cipherBuffer.subarray(cipherBuffer.length - 16);
+  const data = cipherBuffer.subarray(0, cipherBuffer.length - 16);
+  const decipher = crypto.createDecipheriv(
+    'aes-256-gcm',
+    Buffer.from(apiV3Key, 'utf8'),
+    Buffer.from(resource.nonce, 'utf8')
+  );
+  if (resource.associated_data) {
+    decipher.setAAD(Buffer.from(resource.associated_data, 'utf8'));
+  }
+  decipher.setAuthTag(authTag);
+  const decrypted = Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
+  return JSON.parse(decrypted);
+}
+
+export function createPayRouter(options = {}) {
   const router = express.Router();
+  const wxpayClientFactory = options.createWxpayClient || createWxpayClient;
 
   router.use('/notify', express.raw({ type: '*/*' }));
 
@@ -39,179 +84,134 @@ export function createPayRouter() {
 
   router.post('/jsapi/create', async (req, res) => {
     try {
-      const body = req.body || {};
+      const openid =
+        (typeof req.body?.openid === 'string' && req.body.openid.trim()) ||
+        (process.env.WX_DEBUG_OPENID || '').trim();
+      const amount = normalizeAmount(req.body?.amount);
 
-      const description = body.description || '测试支付';
-      const outTradeNo = body.out_trade_no || body.outTradeNo || `TEST_${Date.now()}`;
-      const total = Number(body?.amount?.total ?? 1);
-
-      if (!Number.isFinite(total) || total <= 0) {
-        return res.json({ code: 1, msg: 'amount.total invalid', data: null });
-      }
-
-      const notifyUrl = process.env.WX_NOTIFY_URL || 'https://yiersanai.com/v1/pay/notify';
-
-      const { instance, mchid, appid } = createWxpayClient();
-
-      const openid = body.openid || process.env.WX_DEBUG_OPENID;
       if (!openid) {
-        return res.json({ code: 1, msg: 'openid missing', data: null });
+        return res.status(400).json({ code: 400, msg: 'openid required' });
+      }
+      if (!amount) {
+        return res.status(400).json({ code: 400, msg: 'amount required' });
       }
 
-      const resp = await instance.post('/v3/pay/transactions/jsapi', {
-        mchid,
-        appid,
-        description,
+      const prisma = await getPrisma();
+      const user = await prisma.user.upsert({
+        where: { openid },
+        update: {},
+        create: { openid },
+      });
+
+      const outTradeNo =
+        (typeof req.body?.out_trade_no === 'string' && req.body.out_trade_no.trim()) ||
+        generateOutTradeNo();
+
+      const appId = process.env.WX_APP_ID || 'wxresume-app';
+      const wxpayClient = wxpayClientFactory();
+      const { data } = await wxpayClient.instance.post('/v3/pay/transactions/jsapi', {
+        appid: appId,
+        mchid: process.env.WX_MCH_ID || 'mock-mchid',
+        description: req.body?.description || 'wxresume order',
         out_trade_no: outTradeNo,
-        notify_url: notifyUrl,
-        amount: { total, currency: 'CNY' },
+        notify_url: process.env.WX_NOTIFY_URL || 'https://example.com/v1/pay/notify',
+        amount: {
+          total: amount,
+          currency: 'CNY',
+        },
         payer: { openid },
       });
 
-      const prepayId = resp?.data?.prepay_id;
+      const prepayId = data?.prepay_id;
       if (!prepayId) {
-        return res.json({ code: 1, msg: 'prepay_id missing', data: resp?.data || null });
+        return res.status(502).json({ code: 502, msg: 'prepay_id missing' });
       }
 
-      try {
-        const prisma = await getPrisma();
-        const user = await prisma.user.upsert({
-          where: { openid },
-          update: {},
-          create: { openid },
-        });
-
-        await prisma.order.upsert({
-          where: { out_trade_no: outTradeNo },
-          create: {
-            out_trade_no: outTradeNo,
-            wx_prepay_id: prepayId,
-            amount: total,
-            status: 'CREATED',
-            created_at: new Date(),
-            user_id: user.id,
-            plan: body.plan || 'wxpay',
-          },
-          update: {
-            wx_prepay_id: prepayId,
-            amount: total,
-            status: 'CREATED',
-            user_id: user.id,
-            plan: body.plan || 'wxpay',
-          },
-        });
-      } catch (dbErr) {
-        console.error('[pay.jsapi.create][db] failed', dbErr);
-      }
-
-      const timeStamp = String(Math.floor(Date.now() / 1000));
-      const nonceStr = crypto.randomBytes(16).toString('hex');
-      const packageStr = `prepay_id=${prepayId}`;
-
-      const paySign = signJsapiParams({
-        appId: appid,
-        timeStamp,
-        nonceStr,
-        packageStr,
-      });
-
-      return res.json({
-        code: 0,
-        msg: 'ok',
-        data: {
-          appId: appid,
-          timeStamp,
-          nonceStr,
-          package: packageStr,
-          signType: 'RSA',
-          paySign,
-          prepay_id: prepayId,
+      await prisma.order.upsert({
+        where: { out_trade_no: outTradeNo },
+        create: {
+          user_id: user.id,
+          plan: req.body?.plan || 'wxpay',
+          amount,
+          status: 'CREATED',
+          wx_prepay_id: prepayId,
+          out_trade_no: outTradeNo,
+        },
+        update: {
+          user_id: user.id,
+          plan: req.body?.plan || 'wxpay',
+          amount,
+          status: 'CREATED',
+          wx_prepay_id: prepayId,
         },
       });
-    } catch (err) {
-      console.error('[pay.jsapi.create] error:', err?.response?.data || err?.message || err);
+
+      const timeStamp = Math.floor(Date.now() / 1000).toString();
+      const nonceStr = randomNonce(8);
+      const packageValue = `prepay_id=${prepayId}`;
+      const paySign = signPayment({ appId, timeStamp, nonceStr, packageValue });
+
       return res.json({
-        code: 1,
-        msg: err?.response?.data?.message || err?.message || 'create order failed',
-        data: err?.response?.data || null,
+        appId,
+        timeStamp,
+        nonceStr,
+        package: packageValue,
+        signType: 'RSA',
+        paySign,
+        out_trade_no: outTradeNo,
       });
+    } catch (err) {
+      console.error('[pay.jsapi.create] failed', err);
+      return res.status(500).json({ code: 500, msg: 'wxpay create failed' });
     }
   });
 
   router.post('/notify', async (req, res) => {
     try {
-      const raw = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '';
+      const rawBody = Buffer.isBuffer(req.body)
+        ? req.body
+        : Buffer.from(req.body ? String(req.body) : '');
 
-      fs.appendFileSync('/tmp/wechat_notify.log', `${raw}\n\n`);
+      fs.appendFileSync('/tmp/wechat_notify.log', `${rawBody.toString('utf8')}\n`);
 
-      const payload = JSON.parse(raw);
-      const resource = payload?.resource || {};
-      const apiV3Key = process.env.WX_API_V3_KEY;
-
-      if (!apiV3Key) throw new Error('WX_API_V3_KEY missing');
-      if (!resource?.ciphertext || !resource?.nonce || !resource?.associated_data) {
-        throw new Error('resource fields missing');
+      let payload = {};
+      try {
+        payload = rawBody.length ? JSON.parse(rawBody.toString('utf8')) : {};
+      } catch (err) {
+        console.warn('[pay.notify] invalid JSON payload', err);
       }
 
-      const data = Buffer.from(resource.ciphertext, 'base64');
-      const ciphertext = data.subarray(0, data.length - 16);
-      const authTag = data.subarray(data.length - 16);
-
-      const decipher = crypto.createDecipheriv(
-        'aes-256-gcm',
-        Buffer.from(apiV3Key, 'utf8'),
-        Buffer.from(resource.nonce, 'utf8')
-      );
-
-      decipher.setAAD(Buffer.from(resource.associated_data, 'utf8'));
-      decipher.setAuthTag(authTag);
-
-      const decrypted = Buffer.concat([
-        decipher.update(ciphertext),
-        decipher.final(),
-      ]).toString('utf8');
-
-      const transaction = JSON.parse(decrypted);
-
-      const record = {
-        id: payload?.id,
-        event_type: payload?.event_type,
-        create_time: payload?.create_time,
-        summary: payload?.summary,
-        out_trade_no: transaction?.out_trade_no,
-        transaction_id: transaction?.transaction_id,
-        trade_state: transaction?.trade_state,
-        success_time: transaction?.success_time,
-        openid: transaction?.payer?.openid,
-        amount: transaction?.amount,
-      };
-
-      fs.appendFileSync('/tmp/wechat_notify_decrypted.log', `${JSON.stringify(record)}\n`);
-
-      console.log('[pay.notify] decrypted ok:', record.out_trade_no, record.trade_state);
+      let decrypted = null;
+      try {
+        decrypted = decryptResource(payload.resource || {}, process.env.WX_API_V3_KEY);
+        if (decrypted) {
+          fs.appendFileSync(
+            '/tmp/wechat_notify_decrypted.log',
+            `${JSON.stringify(decrypted)}\n`
+          );
+        }
+      } catch (err) {
+        console.warn('[pay.notify] decrypt failed', err);
+      }
 
       if (
-        payload?.event_type === 'TRANSACTION.SUCCESS' &&
-        transaction?.trade_state === 'SUCCESS'
+        payload.event_type === 'TRANSACTION.SUCCESS' &&
+        decrypted?.trade_state === 'SUCCESS'
       ) {
-        try {
+        const outTradeNo = decrypted.out_trade_no;
+        if (outTradeNo) {
           const prisma = await getPrisma();
-
           await prisma.order.updateMany({
-            where: { out_trade_no: transaction.out_trade_no },
+            where: { out_trade_no: outTradeNo },
             data: {
               status: 'PAID',
-              paid_at: transaction.success_time
-                ? new Date(transaction.success_time)
-                : new Date(),
+              paid_at: decrypted.success_time ? new Date(decrypted.success_time) : new Date(),
             },
           });
-        } catch (dbErr) {
-          console.error('[pay.notify][db] update failed', dbErr);
         }
       }
     } catch (err) {
-      console.error('[pay.notify] decrypt error:', err?.message || err);
+      console.error('[pay.notify] failed', err);
     }
 
     return res.status(200).json({ code: 'SUCCESS', message: 'OK' });

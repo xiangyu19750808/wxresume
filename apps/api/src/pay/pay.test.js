@@ -87,32 +87,40 @@ after(async () => {
 
 test('jsapi create + notify flow', async () => {
   const app = express();
-  app.use('/v1/pay', createPayRouter());
+  app.use(
+    '/v1/pay',
+    createPayRouter({
+      createWxpayClient() {
+        return {
+          instance: {
+            async post() {
+              return { data: { prepay_id: 'mock_prepay' } };
+            },
+          },
+        };
+      },
+    })
+  );
   const server = app.listen(0);
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
 
   try {
-    process.env.WX_DEBUG_OPENID = 'openid-123';
-    const outTradeNo = `TEST_${Date.now()}`;
     const createResponse = await fetch(`${baseUrl}/v1/pay/jsapi/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        openid: 'openid-123',
-        out_trade_no: outTradeNo,
-        amount: { total: 300 },
-        plan: 'pro',
-      }),
+      body: JSON.stringify({ openid: 'openid-123', amount: 300, plan: 'pro' }),
     });
 
     assert.equal(createResponse.status, 200);
     const createBody = await createResponse.json();
-    assert.equal(createBody.code, 0);
-    assert.equal(createBody.data?.package, `prepay_id=mock-prepay-${outTradeNo}`);
+    assert.equal(createBody.out_trade_no !== undefined, true);
+    assert.equal(createBody.package, 'prepay_id=mock_prepay');
+
+    const outTradeNo = createBody.out_trade_no;
     const order = await prisma.order.findUnique({ where: { out_trade_no: outTradeNo } });
     assert.equal(order?.status, 'CREATED');
-    assert.equal(order?.wx_prepay_id, `mock-prepay-${outTradeNo}`);
+    assert.equal(order?.wx_prepay_id, 'mock_prepay');
 
     const transaction = {
       out_trade_no: outTradeNo,
@@ -138,7 +146,6 @@ test('jsapi create + notify flow', async () => {
     assert.equal(updated?.status, 'PAID');
     assert.equal(Boolean(updated?.paid_at), true);
   } finally {
-    delete process.env.WX_DEBUG_OPENID;
     server.close();
   }
 });
