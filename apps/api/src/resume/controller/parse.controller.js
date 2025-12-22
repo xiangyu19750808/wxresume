@@ -42,9 +42,9 @@ export class ParseController {
         const body = req.body;
 
         // 支持两种JSON格式：1. resumeText 2. file_content (Base64)
-        if (body.resumeText) {
+        if (body.resumeText || body.text) {
           // 直接处理文本简历
-          const resumeText = fromPlainText(body.resumeText);
+          const resumeText = fromPlainText(body.resumeText || body.text);
           
           if (!resumeText || resumeText.length < 50) {
             return res.status(400).json({
@@ -168,8 +168,8 @@ export class ParseController {
               .json({ code: 1, msg: 'unsupported_file_type', data: { reason: 'unsupported_file_type' } });
           }
           resumeText = await parseResumeFromFile(req.file.path, req.file.mimetype);
-        } else if (req.body?.resumeText) {
-          resumeText = fromPlainText(req.body.resumeText);
+        } else if (req.body?.resumeText || req.body?.text) {
+          resumeText = fromPlainText(req.body.resumeText || req.body.text);
         }
 
         if (!resumeText) {
