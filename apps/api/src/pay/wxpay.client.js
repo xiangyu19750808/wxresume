@@ -66,3 +66,4 @@ export function signJsapiParams({ appId, timeStamp, nonceStr, packageStr }) {
 
   return paySign;
 }
+

@@ -590,11 +590,18 @@ app.get('/', (req, res) => {
   res.send('API is running');
 });
 
-// 中间件顺序：reqid -> 解析体 -> 安全头 -> CORS -> 路由
 app.use(reqid());
+app.use(helmet());
+
+// ✅ 必须：notify raw 在任何 body parser 之前
+app.use("/v1/pay/notify", express.raw({ type: "*/*" }));
+
+// ✅ 其他接口正常用 json/urlencoded
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(helmet());
+
+// ✅ 再挂载 pay 路由
+app.use("/v1/pay", createPayRouter());
 
 // 最小 CORS 白名单控制（含预检）
 app.use((req, res, next) => {
@@ -880,7 +887,6 @@ app.use(createResultsRouter());
 app.use('/v1/analysis', createDiagnoseRouter());
 app.use(createUsersRouter());
 app.use('/v1/resume', createResumeRouter());
-app.use('/v1/pay', createPayRouter());
 
 
 // -------------------------------
