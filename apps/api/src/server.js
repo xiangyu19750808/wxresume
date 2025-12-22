@@ -13,6 +13,7 @@ import { createFileRouter } from './modules/file/index.js';
 import { createResultsRouter } from './modules/results/index.js';
 import { createDiagnoseRouter } from './analysis/index.js';
 import { createResumeRouter } from './resume/index.js';
+import { createPayRouter } from './pay/index.js';
 import { reqid } from './middlewares/reqid.js';
 import jwtMiddleware from './middlewares/jwt.js';
 
@@ -589,9 +590,17 @@ app.get('/', (req, res) => {
 
 // 中间件顺序：reqid -> 解析体 -> 安全头 -> CORS -> 路由
 app.use(reqid());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const jsonParser = express.json();
+const urlencodedParser = express.urlencoded({ extended: true });
+app.use((req, res, next) => {
+  if (req.path.startsWith('/v1/pay')) return next();
+  jsonParser(req, res, (err) => {
+    if (err) return next(err);
+    urlencodedParser(req, res, next);
+  });
+});
 app.use(helmet());
+app.use('/v1/pay', createPayRouter());
 
 // 最小 CORS 白名单控制（含预检）
 app.use((req, res, next) => {
