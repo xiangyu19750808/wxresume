@@ -1,16 +1,28 @@
-﻿import assert from 'node:assert';
+import assert from 'node:assert';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
+import net from 'node:net';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const apiRoot = path.resolve(__dirname, '..');
-const PORT = 18080;
 
-async function startServer() {
+async function getFreePort(host = '127.0.0.1') {
+  return await new Promise((resolve, reject) => {
+    const s = net.createServer();
+    s.unref();
+    s.on('error', reject);
+    s.listen(0, host, () => {
+      const { port } = s.address();
+      s.close(() => resolve(port));
+    });
+  });
+}
+
+async function startServer(PORT) {
   const server = spawn('node', ['src/server.js'], {
     cwd: apiRoot,
     env: {
@@ -63,8 +75,7 @@ function waitForReady(proc) {
   });
 }
 
-async function callResumeParse() {
-  // 两种格式都支持：直接resumeText或Base64
+async function callResumeParse(PORT) {
   const response = await fetch(`http://127.0.0.1:${PORT}/v1/resume/parse`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -77,9 +88,10 @@ async function callResumeParse() {
 }
 
 test('POST /v1/resume/parse returns structured resume', async () => {
-  const server = await startServer();
+  const PORT = await getFreePort('127.0.0.1');
+  const server = await startServer(PORT);
   try {
-    const payload = await callResumeParse();
+    const payload = await callResumeParse(PORT);
 
     assert.strictEqual(payload.code, 0);
     assert.ok(payload.data?.resumeText.length > 0, 'resumeText should not be empty');
