@@ -11,7 +11,7 @@
     "seed": "node prisma/seed.js || true",
     "seed:user": "node src/seed.user.js",
     "pretest": "node ./scripts/pretest.mjs",
-    "test": "node --test"
+    "test": "node --test --test-concurrency=1"
   },
   "dependencies": {
     "@prisma/client": "6.17.1",
