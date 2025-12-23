@@ -4,6 +4,27 @@ import pay from './wxpay.js';
 import crypto from 'node:crypto';
 
 import fs from 'node:fs';
+import { createWxpayClient } from './wxpay.js';
+import { signJsapiParams } from './wxpay.client.js';
+
+
+let prismaPromise;
+
+async function getPrisma() {
+  if (prismaPromise) return prismaPromise;
+  if (!process.env.DB_URL) {
+    process.env.DB_URL = 'file:./prisma/dev.db';
+  }
+  prismaPromise = import('@prisma/client').then(({ PrismaClient }) => {
+    const globalForPrisma = globalThis;
+    const prismaClient = globalForPrisma.__wxresumePayPrisma || new PrismaClient();
+    if (!globalForPrisma.__wxresumePayPrisma) {
+      globalForPrisma.__wxresumePayPrisma = prismaClient;
+    }
+    return prismaClient;
+  });
+  return prismaPromise;
+}
 
 import { Router } from 'express';
 
