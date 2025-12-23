@@ -574,9 +574,10 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
 // 初始化应用 & 中间件顺序
 // -------------------------------
 const app = express();
+app.use((req, res, next) => { console.log('>>> 收到请求:', req.method, req.url); next(); });
 
 // 允许直接访问 files 目录
-const filesDirectory = path.join('C:', 'Users', 'pc', 'wxresume', 'files');  // 使用绝对路径
+const filesDirectory = path.join('/root/wxresume/apps/api', 'files');  // 使用绝对路径
 console.log("Static files directory:", filesDirectory);  // 打印静态文件目录
 app.use('/files', express.static(filesDirectory, { 
   fallthrough: false,  // 如果文件不存在，直接返回 404 错误
@@ -592,13 +593,11 @@ app.get('/', (req, res) => {
 app.use(reqid());
 const jsonParser = express.json();
 const urlencodedParser = express.urlencoded({ extended: true });
-app.use((req, res, next) => {
-  if (req.path.startsWith('/v1/pay')) return next();
-  jsonParser(req, res, (err) => {
-    if (err) return next(err);
-    urlencodedParser(req, res, next);
-  });
-});
+// 修改后的逻辑：让所有接口都支持 JSON 解析
+app.use(jsonParser); 
+app.use(urlencodedParser);
+
+ 
 app.use(helmet());
 app.use('/v1/pay', createPayRouter());
 
