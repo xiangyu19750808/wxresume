@@ -3,9 +3,15 @@ import fs from 'node:fs';
 import https from 'node:https';
 
 const privateKey = fs.readFileSync('/root/wxresume/apps/api/wxpay/apiclient_key.pem', 'utf8').trim();
-const MCH_ID = process.env.WXPAY_MCH_ID;
-const SERIAL_NO = process.env.WXPAY_SERIAL_NO;
-const APPID = process.env.WXPAY_APPID;
+// 微信支付基础配置
+const MCH_ID = process.env.WXPAY_MCH_ID || '1728914815';
+const SERIAL_NO = process.env.WXPAY_SERIAL_NO || '69A2A1234788FE971FD4B415DEA1EE5C9D5FF662';
+const APPID = process.env.WXPAY_APPID || 'wx87ca4e3a9535a654';
+
+// 调试信息（可选，能帮你确认当前读取的是哪里的值）
+if (!process.env.WXPAY_MCH_ID) {
+  console.log('⚠️ 提示：未检测到 .env 配置，正在使用默认/Mock配置运行');
+}
 
 // 签名生成函数
 function generateSignature(method, url, timestamp, nonce, body) {

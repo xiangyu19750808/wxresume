@@ -15,7 +15,7 @@ const privateKey = fs.readFileSync('/root/wxresume/apps/api/wxpay/apiclient_key.
 
 const APPID = 'wx87ca4e3a9535a654';
 
-const API_V3_KEY = process.env.WXPAY_API_V3_KEY;
+const API_V3_KEY = process.env.WXPAY_API_V3_KEY || 'your_mock_v3_key_32_chars_length';
 
 
 function decryptResource(resource, apiV3Key) {
