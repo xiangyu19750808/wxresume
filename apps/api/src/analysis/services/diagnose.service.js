@@ -1,6 +1,6 @@
 ﻿/**
- * 九维分析诊断服务（完整版）
- * 集成所有9个核心维度，符合九维分析规范
+ * 九维分析诊断服务（极致结构化增强版）
+ * 集成所有9个核心维度，并引入 Resume/JD 结构化提取工具
  */
 import { ATSCompatibilityService } from './ats-compatibility.service.js';
 import { HardRequirementService } from './hard-requirement.service.js';
@@ -11,6 +11,10 @@ import { CareerRiskService } from './career-risk.service.js';
 import { EducationMatchService } from './education-match.service.js';
 import { FunctionMatchService } from './function-match.service.js';
 import { SemanticMatchService } from './semantic-match.service.js';
+
+// ✅ 引入新创建的结构化工具
+import { ResumeParserUtil } from './resume-parser.util.js';
+import { JDParserUtil } from './jd-parser.util.js';
 
 export class DiagnoseService {
   constructor() {
@@ -34,9 +38,14 @@ export class DiagnoseService {
   }
 
   async diagnose(resumeText, jdText) {
-    console.log("=== 🚀 九维分析诊断服务开始（完整9维度） ===");
-    console.log(`简历长度: ${resumeText?.length || 0} 字符`);
-    console.log(`JD长度: ${jdText?.length || 0} 字符`);
+    console.log("\n=== 🚀 九维分析诊断服务开始（极致结构化版） ===");
+    
+    // ✅ 第1步：前置结构化提取
+    // 这样做的好处是：只需提取一次，所有维度共享精准数据，不再重复正则搜索
+    const structuredResume = ResumeParserUtil.parse(resumeText);
+    const structuredJD = JDParserUtil.parse(jdText);
+
+    console.log(`[结构化完成] 简历量化点: ${structuredResume?.quantified_count || 0}, JD技能要求: ${structuredJD?.skills_required?.length || 0}个`);
 
     const results = {};
 
@@ -57,7 +66,9 @@ export class DiagnoseService {
 
         console.log(`\n📊 分析维度: ${analyzer.displayName} (${dimension})`);
         
-        const result = await analyzer.analyze(resumeText, jdText);
+        // ✅ 第2步：将结构化数据作为第三、四个参数传入（兼容旧 Service）
+        // 如果你的子 Service 还没升级接收这些参数，它们会继续用原始 text
+        const result = await analyzer.analyze(resumeText, jdText, structuredResume, structuredJD);
         results[dimension] = result;
         
         console.log(`  结果: ${result.current_grade}级 (${result.current_score}分) → 优化: ${result.optimized_grade}级 (${result.optimized_score}分)`);

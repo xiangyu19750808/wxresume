@@ -71,6 +71,7 @@ export const createPayRouter = () => {
 
 
 
+  // 1. 创建订单
   router.post('/jsapi/create', async (req, res) => {
 
     const { openid, amount, description, out_trade_no, plan } = req.body;

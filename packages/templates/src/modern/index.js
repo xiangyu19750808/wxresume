@@ -2,241 +2,127 @@ import { escapeHtml, ensureArray, pickResume } from '../shared/utils.js';
 
 export const metadata = {
   id: 'modern',
-  name: 'Modern 双栏版',
-  description: '双色信息块，强调技能与成果'
+  name: 'OpenResume Pro Photo',
+  description: '1:1 像素级复刻官方视觉（带头像+左侧短线）'
 };
-
-function renderList(items = [], emptyText = '暂无内容', mapper = (value) => `<li>${escapeHtml(value)}</li>`) {
-  if (!items.length) return `<p class="muted">${escapeHtml(emptyText)}</p>`;
-  return `<ul>${items.map((item) => mapper(item)).join('')}</ul>`;
-}
-
-function renderExperience(experiences = []) {
-  if (!experiences.length) {
-    return '<p class="muted">暂无经历</p>';
-  }
-  return experiences
-    .map((exp) => {
-      const company = escapeHtml(exp.name || '公司未填');
-      const position = escapeHtml(exp.position || '角色未填');
-      const highlights = ensureArray(exp.highlights)
-        .map((h) => `<li>${escapeHtml(h)}</li>`)
-        .join('');
-      const period = [exp.startDate, exp.endDate || '至今']
-        .filter(Boolean)
-        .map((v) => escapeHtml(v))
-        .join(' - ');
-      return `
-        <article>
-          <header>
-            <div>
-              <strong>${position}</strong>
-              <span class="muted">${company}</span>
-            </div>
-            ${period ? `<span class="muted">${period}</span>` : ''}
-          </header>
-          ${highlights ? `<ul>${highlights}</ul>` : ''}
-        </article>
-      `;
-    })
-    .join('\n');
-}
 
 export function renderModern(data = {}, ctx = {}) {
   const resume = pickResume(data);
   const basics = resume.basics || {};
-  const name = escapeHtml(basics.name || '匿名候选人');
-  const title = escapeHtml(basics.label || '');
-  const summary = escapeHtml(basics.summary || '');
-  const contact = [basics.email, basics.phone, basics.website]
-    .filter((v) => v)
-    .map((value) => `<li>${escapeHtml(value)}</li>`)
-    .join('');
-
-  const languages = ensureArray(resume.languages).map((lang) => {
-    const language = escapeHtml(lang.language || '语言未填');
-    const fluency = escapeHtml(lang.fluency || '');
-    return `<li><strong>${language}</strong>${fluency ? `<span class="muted"> · ${fluency}</span>` : ''}</li>`;
-  });
-
-  const interests = ensureArray(resume.interests).map((interest) => escapeHtml(interest.name || interest));
+  const themeColor = "#0ea5e9"; 
 
   const css = `
+    @page { size: A4; margin: 0; }
     body {
       margin: 0;
-      background: linear-gradient(120deg, #ecfeff 0%, #f8fafc 60%, #eef2ff 100%);
-      font-size: 14px;
-      line-height: 1.6;
-      color: #1e293b;
-      font-family: ${ctx.fontFamily || "'WXResumeFallback', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif"};
+      padding: 15mm 15mm; 
+      font-family: ${ctx.fontFamily || "sans-serif"};
+      color: #374151;
+      font-size: 10.5pt;
+      line-height: 1.5;
     }
-    .sheet {
-      max-width: 960px;
-      margin: 32px auto;
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 32px;
-      background: #ffffff;
-      box-shadow: 0 25px 45px rgba(30, 64, 175, 0.15);
-      border-radius: 24px;
-      overflow: hidden;
+    
+    .top-bar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 4.5pt;
+      background-color: ${themeColor};
     }
-    aside {
-      background: linear-gradient(180deg, #1e40af, #1d4ed8);
-      color: #f8fafc;
-      padding: 32px;
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-    }
-    aside h2 {
-      font-size: 16px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      margin: 0 0 8px;
-    }
-    aside ul {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    aside li + li {
-      margin-top: 6px;
-    }
-    main {
-      padding: 40px 48px;
-      display: flex;
-      flex-direction: column;
-      gap: 32px;
-    }
-    header.hero {
-      border-bottom: 1px solid #e2e8f0;
-      padding-bottom: 24px;
-    }
-    header.hero h1 {
-      font-size: 32px;
-      margin: 0;
-      color: #1d4ed8;
-    }
-    header.hero p {
-      margin: 8px 0 0;
-      font-size: 16px;
-      color: #475569;
-    }
-    section h2 {
-      margin: 0 0 12px;
-      font-size: 18px;
-      color: #1e293b;
-      letter-spacing: 0.05em;
-    }
-    section article {
-      background: #f8fafc;
-      border-radius: 12px;
-      padding: 16px 20px;
-      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.2);
-      margin-bottom: 16px;
-    }
-    section article header {
+
+    /* 头像与文字的包裹器 */
+    .header-container {
       display: flex;
       justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 8px;
+      align-items: flex-start;
+      margin-top: 10pt;
     }
-    section article ul {
-      margin: 0 0 0 18px;
+
+    .name { font-size: 26pt; font-weight: 800; color: #111827; letter-spacing: -1pt; line-height: 1.2; }
+    .label { font-size: 12pt; color: #4b5563; margin-top: 2pt; font-weight: 500; }
+    .contact-info { display: flex; gap: 10pt; margin-top: 10pt; font-size: 9.5pt; color: #6b7280; }
+
+    /* COS 头像样式 */
+    .profile-photo {
+      width: 75pt;
+      height: 75pt;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid #e5e7eb;
     }
-    .tag-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 0;
-      margin: 0;
-      list-style: none;
-    }
-    .tag-list li {
-      background: rgba(59, 130, 246, 0.12);
-      color: #1d4ed8;
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-weight: 600;
-      letter-spacing: 0.03em;
-    }
-    .muted {
-      color: rgba(148, 163, 184, 0.9);
-      font-weight: 400;
-    }
-    @media (max-width: 900px) {
-      .sheet {
-        grid-template-columns: 1fr;
-      }
-      aside {
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 16px;
-      }
-      aside section {
-        flex: 1 1 200px;
-      }
-    }
+
+    .section-title-container { display: flex; align-items: center; margin-top: 20pt; margin-bottom: 10pt; }
+    .section-title-line { width: 25pt; height: 3.5pt; background-color: ${themeColor}; margin-right: 10pt; }
+    .section-title-text { font-size: 13pt; font-weight: 700; color: #111827; text-transform: uppercase; }
+
+    .item { margin-bottom: 12pt; }
+    .item-header { display: flex; justify-content: space-between; font-weight: 700; color: #111827; font-size: 11pt; }
+    .item-sub { display: flex; justify-content: space-between; font-style: italic; color: #6b7280; font-size: 10pt; }
+    .bullet-list { margin: 4pt 0 0 12pt; padding: 0; list-style-type: disc; }
+    .bullet-list li { margin-bottom: 3pt; color: #374151; }
+    .skills-section { font-size: 10.5pt; line-height: 1.6; color: #374151; margin-left: 35pt;}
   `;
 
-  const skills = ensureArray(resume.skills).map((skill) => {
-    const name = escapeHtml(skill.name || '');
-    const keywords = ensureArray(skill.keywords).map((k) => `<li>${escapeHtml(k)}</li>`).join('');
-    return `
-      <section>
-        <h2>${name || '技能模块'}</h2>
-        ${keywords ? `<ul class="tag-list">${keywords}</ul>` : '<p class="muted">未填写关键字</p>'}
-      </section>
-    `;
-  });
-
   const html = `
-    <div class="sheet modern">
-      <aside>
-        <section>
-          <h2>联系</h2>
-          <ul>${contact || '<li>请在简历中补充联系方式</li>'}</ul>
-        </section>
-        <section>
-          <h2>语言</h2>
-          ${languages.length ? `<ul>${languages.join('')}</ul>` : '<p class="muted">暂无语言信息</p>'}
-        </section>
-        <section>
-          <h2>兴趣</h2>
-          ${interests.length ? `<ul>${interests.map((i) => `<li>${i}</li>`).join('')}</ul>` : '<p class="muted">暂无兴趣标签</p>'}
-        </section>
-      </aside>
-      <main>
-        <header class="hero">
-          <h1>${name}</h1>
-          ${title ? `<p>${title}</p>` : ''}
+    <div class="top-bar"></div>
+    <div class="container">
+      <div class="header-container">
+        <header style="flex: 1;">
+          <div class="name">${escapeHtml(basics.name || '姓名')}</div>
+          <div class="label">${escapeHtml(basics.label || '')}</div>
+          <div class="contact-info">
+            ${basics.email ? `<span>${escapeHtml(basics.email)}</span>` : ''}
+            ${basics.phone ? `<span>| ${escapeHtml(basics.phone)}</span>` : ''}
+            ${basics.location?.city ? `<span>| ${escapeHtml(basics.location.city)}</span>` : ''}
+          </div>
         </header>
-        ${summary ? `<section><h2>简介</h2><p>${summary}</p></section>` : ''}
-        <section>
-          <h2>工作经历</h2>
-          ${renderExperience(ensureArray(resume.work))}
-        </section>
-        <section>
-          <h2>技能矩阵</h2>
-          ${skills.length ? skills.join('\n') : '<p class="muted">暂无技能矩阵</p>'}
-        </section>
-        <section>
-          <h2>荣誉与证书</h2>
-          ${renderList(ensureArray(resume.awards), '暂无荣誉', (award) => {
-            const title = escapeHtml(award.title || '奖项未填');
-            const awarder = escapeHtml(award.awarder || '');
-            const date = escapeHtml(award.date || '');
-            return `<li><strong>${title}</strong>${awarder ? `<span class="muted"> · ${awarder}</span>` : ''}${date ? `<span class="muted"> · ${date}</span>` : ''}</li>`;
-          })}
-        </section>
-      </main>
+        
+        ${basics.image ? `
+          <img src="${basics.image}" class="profile-photo" />
+        ` : ''}
+      </div>
+
+      <div class="section-title-container">
+        <div class="section-title-line"></div>
+        <div class="section-title-text">Work Experience</div>
+      </div>
+      ${ensureArray(resume.work).map(item => `
+        <div class="item">
+          <div class="item-header">
+            <span>${escapeHtml(item.name)}</span>
+            <span>${escapeHtml(item.startDate || '')} ${item.endDate ? '- ' + escapeHtml(item.endDate) : ' - Present'}</span>
+          </div>
+          <div class="item-sub"><span>${escapeHtml(item.position)}</span></div>
+          <ul class="bullet-list">
+            ${ensureArray(item.highlights).map(h => `<li>${escapeHtml(h)}</li>`).join('')}
+          </ul>
+        </div>
+      `).join('')}
+
+      <div class="section-title-container">
+        <div class="section-title-line"></div>
+        <div class="section-title-text">Education</div>
+      </div>
+      ${ensureArray(resume.education).map(edu => `
+        <div class="item">
+          <div class="item-header">
+            <span>${escapeHtml(edu.institution)}</span>
+            <span>${escapeHtml(edu.endDate || '')}</span>
+          </div>
+          <div class="item-sub"><span>${escapeHtml(edu.area)}</span></div>
+        </div>
+      `).join('')}
+
+      <div class="section-title-container">
+        <div class="section-title-line"></div>
+        <div class="section-title-text">Skills</div>
+      </div>
+      <div class="skills-section">
+        ${ensureArray(resume.skills).map(s => `
+          <div><strong>${escapeHtml(s.name)}:</strong> ${ensureArray(s.keywords).join(', ')}</div>
+        `).join('')}
+      </div>
     </div>
   `;
 
-  return {
-    html,
-    css,
-    metadata
-  };
+  return { html, css, metadata };
 }

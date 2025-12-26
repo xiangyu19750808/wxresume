@@ -8,7 +8,7 @@ export class DiagnoseController {
 
   async handleDiagnose(req, res) {
     try {
-      const { resumeText = '', jdText = '' } = req.body || {};
+      const { resumeText = req.body.resume_text || "", jdText = req.body.jd_text || "" } = req.body || {};
 
       // ✅ 这里按你当前 DiagnoseService 的方法名：diagnose
       const result = await this.diagnoseService.diagnose(resumeText, jdText);
