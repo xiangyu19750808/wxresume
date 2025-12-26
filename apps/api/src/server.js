@@ -23,17 +23,32 @@ import { handleOptimize } from './analysis/controller/optimize.controller.js';
 import { handleExportPdf } from './analysis/controller/export.controller.js';
 
 const app = express();
+app.use((req, res, next) => { console.log('>>> 收到请求:', req.method, req.url); next(); });
 
-const upload = multer({ 
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 } 
+// 允许直接访问 files 目录
+const filesDirectory = path.join('/root/wxresume/apps/api', 'files');  // 使用绝对路径
+console.log("Static files directory:", filesDirectory);  // 打印静态文件目录
+app.use('/files', express.static(filesDirectory, { 
+  fallthrough: false,  // 如果文件不存在，直接返回 404 错误
+  dotfiles: 'deny'     // 禁止访问以 "." 开头的文件
+}));
+
+// 根路径路由
+app.get('/', (req, res) => {
+  res.send('API is running');
 });
 
-// --------------------------------------------------------------------------
-// 1. 基础中间件
-// --------------------------------------------------------------------------
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 中间件顺序：reqid -> 解析体 -> 安全头 -> CORS -> 路由
+app.use(reqid());
+const jsonParser = express.json();
+const urlencodedParser = express.urlencoded({ extended: true });
+// 修改后的逻辑：让所有接口都支持 JSON 解析
+app.use(jsonParser); 
+app.use(urlencodedParser);
+
+ 
+app.use(helmet());
+app.use('/v1/pay', createPayRouter());
 
 // 🎯 全量流量监控：只要有请求经过，必然打印日志
 app.use((req, res, next) => {
