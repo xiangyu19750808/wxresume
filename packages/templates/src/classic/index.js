@@ -136,25 +136,22 @@ export function renderClassic(data = {}, ctx = {}) {
   `;
 
   const css = `
-    :root {
-      color-scheme: light;
-    }
     body {
       margin: 0;
-      padding: 36px 48px;
+      padding: 0;
       font-size: 14px;
       line-height: 1.6;
       color: #1f2937;
-      background: #f9fafb;
-      font-family: ${ctx.fontFamily || "'WXResumeFallback', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif"};
+      background: #fff;
+      /* 🎯 重点：将 Noto Sans CJK SC 置于首位，确保 Linux 渲染中文 */
+      font-family: "Noto Sans CJK SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
     .page {
-      max-width: 720px;
+      max-width: 800px;
       margin: 0 auto;
       background: #fff;
-      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
       padding: 40px 48px;
-      border-radius: 12px;
     }
     h1 {
       font-size: 28px;
@@ -163,10 +160,12 @@ export function renderClassic(data = {}, ctx = {}) {
     }
     h2 {
       font-size: 16px;
-      margin: 32px 0 12px;
+      margin: 24px 0 12px;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: #0f172a;
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 4px;
     }
     p {
       margin: 0 0 8px;
@@ -182,9 +181,6 @@ export function renderClassic(data = {}, ctx = {}) {
       grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
       gap: 4px 12px;
       padding: 0;
-    }
-    ul.plain li {
-      list-style: none;
     }
     .hero {
       display: flex;
@@ -207,9 +203,6 @@ export function renderClassic(data = {}, ctx = {}) {
       color: #475569;
       text-align: right;
     }
-    .meta li + li {
-      margin-top: 4px;
-    }
     section article {
       margin-bottom: 16px;
     }
@@ -220,16 +213,6 @@ export function renderClassic(data = {}, ctx = {}) {
       font-size: 14px;
       font-weight: 600;
       color: #111827;
-    }
-    section article ul {
-      margin-left: 18px;
-    }
-    a {
-      color: #2563eb;
-      text-decoration: none;
-    }
-    a:hover {
-      text-decoration: underline;
     }
     .muted {
       color: #64748b;

@@ -13,7 +13,7 @@ export function listTemplates() {
 }
 
 export function getTemplate(templateId = 'classic') {
-  const id = templateId || 'classic';
+  const id = templateId || 'modern';
   const template = TEMPLATE_REGISTRY[id];
   if (!template) {
     const available = Object.keys(TEMPLATE_REGISTRY).join(', ');
@@ -40,7 +40,7 @@ ${body}
 }
 
 export async function render(data = {}, options = {}) {
-  const templateId = options.templateId || 'classic';
+  const templateId = options.templateId || 'modern';
   const template = getTemplate(templateId);
   const resume = pickResume(data);
   const { css: fontCSS, fontFamily, warnings: fontWarnings } = loadFontCSS();
